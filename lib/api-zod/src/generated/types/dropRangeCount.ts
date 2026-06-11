@@ -5,7 +5,9 @@
  * API specification for Dip Tracker - securities that have fallen in price
  * OpenAPI spec version: 0.1.0
  */
+import type { DropRangeCountRange } from './dropRangeCountRange';
 
-export interface HealthStatus {
-  status: string;
+export interface DropRangeCount {
+  range: DropRangeCountRange;
+  count: number;
 }

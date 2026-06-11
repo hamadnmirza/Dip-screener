@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface LastUpdated {
+  /** ISO timestamp of last data refresh */
+  timestamp: string;
+  /** Seconds until next scheduled refresh */
+  nextRefreshIn: number;
 }

@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: API specification for Dip Tracker - securities that have fallen in price
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: securities
+    description: Securities (equities and crypto) that have fallen in price
 paths:
   /healthz:
     get:
@@ -24,6 +26,133 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /securities:
+    get:
+      operationId: listSecurities
+      tags: [securities]
+      summary: List securities that have fallen in price
+      description: Returns a filtered list of equities and crypto that have dropped by specified criteria. Data refreshes every 15 minutes.
+      parameters:
+        - name: assetType
+          in: query
+          required: false
+          description: "Filter by asset type: equity or crypto"
+          schema:
+            type: string
+            enum: [equity, crypto]
+        - name: market
+          in: query
+          required: false
+          description: "Filter by market/exchange"
+          schema:
+            type: string
+            enum: [NASDAQ, FTSE100, FTSE250, SP500]
+        - name: dropRange
+          in: query
+          required: false
+          description: "Filter by percentage drop range"
+          schema:
+            type: string
+            enum: [up_to_10, 11_to_20, 21_to_30, 31_plus]
+        - name: timePeriod
+          in: query
+          required: false
+          description: "Time period for measuring the price drop"
+          schema:
+            type: string
+            enum: [1h, 24h, 1w, 1m]
+      responses:
+        "200":
+          description: List of securities matching the filter criteria
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecuritiesResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /securities/summary:
+    get:
+      operationId: getSecuritiesSummary
+      tags: [securities]
+      summary: Summary statistics of falling securities
+      description: Returns aggregate counts of securities falling across drop ranges and asset types for the given time period
+      parameters:
+        - name: timePeriod
+          in: query
+          required: false
+          description: "Time period for measuring the price drop"
+          schema:
+            type: string
+            enum: [1h, 24h, 1w, 1m]
+      responses:
+        "200":
+          description: Summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecuritiesSummary"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /securities/top-movers:
+    get:
+      operationId: getTopMovers
+      tags: [securities]
+      summary: Top falling securities
+      description: Returns the top 10 biggest fallers across all markets for a given time period
+      parameters:
+        - name: timePeriod
+          in: query
+          required: false
+          description: "Time period for measuring the price drop"
+          schema:
+            type: string
+            enum: [1h, 24h, 1w, 1m]
+        - name: assetType
+          in: query
+          required: false
+          description: "Filter by asset type: equity or crypto"
+          schema:
+            type: string
+            enum: [equity, crypto]
+      responses:
+        "200":
+          description: Top falling securities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopMoversResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /securities/last-updated:
+    get:
+      operationId: getLastUpdated
+      tags: [securities]
+      summary: Get the timestamp of the last data refresh
+      description: Returns when the cached price data was last fetched from the data provider
+      responses:
+        "200":
+          description: Last update timestamp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LastUpdated"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +163,159 @@ components:
       required:
         - status
 
+    Security:
+      type: object
+      required:
+        - ticker
+        - name
+        - assetType
+        - market
+        - currentPrice
+        - previousPrice
+        - percentChange
+        - timePeriod
+        - currency
+      properties:
+        ticker:
+          type: string
+          description: Stock/crypto ticker symbol
+        name:
+          type: string
+          description: Full name of the security
+        assetType:
+          type: string
+          enum: [equity, crypto]
+        market:
+          type: string
+          enum: [NASDAQ, FTSE100, FTSE250, SP500, CRYPTO]
+        currentPrice:
+          type: number
+          description: Current price
+        previousPrice:
+          type: number
+          description: Price at the start of the time period
+        percentChange:
+          type: number
+          description: Percentage change (negative = drop)
+        timePeriod:
+          type: string
+          enum: [1h, 24h, 1w, 1m]
+        currency:
+          type: string
+          description: Currency code (USD, GBP, etc.)
+        volume:
+          type: ["number", "null"]
+          description: Trading volume
+
+    SecuritiesResponse:
+      type: object
+      required:
+        - securities
+        - total
+        - lastUpdated
+      properties:
+        securities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Security"
+        total:
+          type: integer
+          description: Total number of matching securities
+        lastUpdated:
+          type: string
+          description: ISO timestamp of last data refresh
+
+    DropRangeCount:
+      type: object
+      required:
+        - range
+        - count
+      properties:
+        range:
+          type: string
+          enum: [up_to_10, 11_to_20, 21_to_30, 31_plus]
+        count:
+          type: integer
+
+    SecuritiesSummary:
+      type: object
+      required:
+        - totalFalling
+        - byDropRange
+        - byAssetType
+        - byMarket
+        - timePeriod
+        - lastUpdated
+      properties:
+        totalFalling:
+          type: integer
+          description: Total number of securities that are falling
+        byDropRange:
+          type: array
+          items:
+            $ref: "#/components/schemas/DropRangeCount"
+        byAssetType:
+          type: object
+          properties:
+            equity:
+              type: integer
+            crypto:
+              type: integer
+          required: [equity, crypto]
+        byMarket:
+          type: object
+          properties:
+            NASDAQ:
+              type: integer
+            FTSE100:
+              type: integer
+            FTSE250:
+              type: integer
+            SP500:
+              type: integer
+            CRYPTO:
+              type: integer
+          required: [NASDAQ, FTSE100, FTSE250, SP500, CRYPTO]
+        timePeriod:
+          type: string
+          enum: [1h, 24h, 1w, 1m]
+        lastUpdated:
+          type: string
+
+    TopMoversResponse:
+      type: object
+      required:
+        - movers
+        - timePeriod
+        - lastUpdated
+      properties:
+        movers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Security"
+        timePeriod:
+          type: string
+          enum: [1h, 24h, 1w, 1m]
+        lastUpdated:
+          type: string
+
+    LastUpdated:
+      type: object
+      required:
+        - timestamp
+        - nextRefreshIn
+      properties:
+        timestamp:
+          type: string
+          description: ISO timestamp of last data refresh
+        nextRefreshIn:
+          type: integer
+          description: Seconds until next scheduled refresh
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string

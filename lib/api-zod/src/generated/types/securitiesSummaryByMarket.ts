@@ -6,6 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
-}
+export type SecuritiesSummaryByMarket = {
+  NASDAQ: number;
+  FTSE100: number;
+  FTSE250: number;
+  SP500: number;
+  CRYPTO: number;
+};

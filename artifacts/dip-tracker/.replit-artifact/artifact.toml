@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Dip Tracker"
+version = "1.0.0"
+id = "artifacts/dip-tracker"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18709
+
+[services.development]
+run = "pnpm --filter @workspace/dip-tracker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/dip-tracker", "run", "build" ]
+publicDir = "artifacts/dip-tracker/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18709"
+BASE_PATH = "/"
