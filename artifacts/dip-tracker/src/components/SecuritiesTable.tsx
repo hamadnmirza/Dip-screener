@@ -25,7 +25,6 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
               <TableHead>Market</TableHead>
               <TableHead className="text-right">Price</TableHead>
               <TableHead className="text-right">Drop %</TableHead>
-              <TableHead className="text-right">Volume</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -35,7 +34,6 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
                 <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                 <TableCell className="text-right"><Skeleton className="h-5 w-20 ml-auto" /></TableCell>
-                <TableCell className="text-right"><Skeleton className="h-5 w-16 ml-auto" /></TableCell>
                 <TableCell className="text-right"><Skeleton className="h-5 w-16 ml-auto" /></TableCell>
               </TableRow>
             ))}
@@ -78,7 +76,6 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
             <TableHead className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">Market</TableHead>
             <TableHead className="font-semibold text-muted-foreground uppercase text-xs tracking-wider text-right">Current Price</TableHead>
             <TableHead className="font-semibold text-muted-foreground uppercase text-xs tracking-wider text-right">Drop %</TableHead>
-            <TableHead className="font-semibold text-muted-foreground uppercase text-xs tracking-wider text-right">Volume</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -96,9 +93,6 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
               </TableCell>
               <TableCell className="text-right font-mono text-destructive font-bold">
                 {formatPercent(security.percentChange)}
-              </TableCell>
-              <TableCell className="text-right font-mono text-muted-foreground">
-                {security.volume != null ? formatCompactNumber(security.volume) : '-'}
               </TableCell>
             </TableRow>
           ))}
