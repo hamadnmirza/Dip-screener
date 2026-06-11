@@ -1,12 +1,13 @@
 /**
  * Financial Modeling Prep (FMP) API client.
+ * Uses the stable API: https://financialmodelingprep.com/stable/
  * Fetches valuation multiples, profile, and quarterly income statement data.
  * Results are cached per ticker for 1 hour.
  */
 
 import { logger } from "./logger";
 
-const FMP_BASE = "https://financialmodelingprep.com/api/v3";
+const FMP_BASE = "https://financialmodelingprep.com/stable";
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -61,29 +62,25 @@ async function fmpFetch<T>(path: string): Promise<T | null> {
   }
 }
 
-// ── Response shapes ───────────────────────────────────────────────────────────
+// ── Response shapes (stable API field names) ──────────────────────────────────
 
 interface FmpRatiosTtm {
-  peRatioTTM?: number | null;
-  pegRatioTTM?: number | null;
-  priceToFreeCashFlowsRatioTTM?: number | null;
-  // Some FMP accounts return slightly different field names
-  pfcfRatioTTM?: number | null;
+  // Stable API uses full camelCase names
+  priceToEarningsRatioTTM?: number | null;
+  priceToEarningsGrowthRatioTTM?: number | null;
+  priceToFreeCashFlowRatioTTM?: number | null;
 }
 
 interface FmpKeyMetricsTtm {
-  enterpriseValueOverEBITDATTM?: number | null;
+  evToEBITDATTM?: number | null;
   evToSalesTTM?: number | null;
   netDebtToEBITDATTM?: number | null;
-  debtToEbitdaTTM?: number | null;
-  freeCashFlowTTM?: number | null;
-  freeCashFlowPerShareTTM?: number | null;
 }
 
 interface FmpProfile {
   sector?: string | null;
   industry?: string | null;
-  mktCap?: number | null;
+  marketCap?: number | null;
 }
 
 interface FmpIncomeStatement {
@@ -123,9 +120,9 @@ export async function fetchFmpValuation(ticker: string): Promise<FmpValuationDat
   if (cached) return cached;
 
   const [ratiosArr, metricsArr, profileArr] = await Promise.all([
-    fmpFetch<FmpRatiosTtm[]>(`/ratios-ttm/${ticker}`),
-    fmpFetch<FmpKeyMetricsTtm[]>(`/key-metrics-ttm/${ticker}`),
-    fmpFetch<FmpProfile[]>(`/profile/${ticker}`),
+    fmpFetch<FmpRatiosTtm[]>(`/ratios-ttm?symbol=${ticker}`),
+    fmpFetch<FmpKeyMetricsTtm[]>(`/key-metrics-ttm?symbol=${ticker}`),
+    fmpFetch<FmpProfile[]>(`/profile?symbol=${ticker}`),
   ]);
 
   if (!ratiosArr && !metricsArr) return null;
@@ -134,17 +131,17 @@ export async function fetchFmpValuation(ticker: string): Promise<FmpValuationDat
   const metrics: FmpKeyMetricsTtm = (metricsArr?.[0]) ?? {};
   const profile: FmpProfile = (profileArr?.[0]) ?? {};
 
-  const pe = num(ratios.peRatioTTM);
+  const pe = num(ratios.priceToEarningsRatioTTM);
   const isUnprofitable = pe === null || pe < 0;
 
   const result: FmpValuationData = {
     pe: pe !== null && pe > 0 ? pe : null,
-    peg: num(ratios.pegRatioTTM),
-    pFcf: num(ratios.priceToFreeCashFlowsRatioTTM ?? ratios.pfcfRatioTTM),
-    evEbitda: num(metrics.enterpriseValueOverEBITDATTM),
+    peg: num(ratios.priceToEarningsGrowthRatioTTM),
+    pFcf: num(ratios.priceToFreeCashFlowRatioTTM),
+    evEbitda: num(metrics.evToEBITDATTM),
     evRevenue: num(metrics.evToSalesTTM),
-    debtToEbitda: num(metrics.netDebtToEBITDATTM ?? metrics.debtToEbitdaTTM),
-    fcfTtm: num(metrics.freeCashFlowTTM),
+    debtToEbitda: num(metrics.netDebtToEBITDATTM),
+    fcfTtm: null, // not needed for scoring; key-metrics-ttm doesn't return absolute FCF
     sector: profile.sector ?? null,
     isUnprofitable,
   };
@@ -159,7 +156,7 @@ export async function fetchFmpQuarterly(ticker: string): Promise<FmpQuarterlyDat
   if (cached) return cached;
 
   const stmts = await fmpFetch<FmpIncomeStatement[]>(
-    `/income-statement/${ticker}?period=quarter&limit=5`
+    `/income-statement?symbol=${ticker}&period=quarter&limit=5`
   );
 
   if (!stmts || stmts.length < 3) return null;
