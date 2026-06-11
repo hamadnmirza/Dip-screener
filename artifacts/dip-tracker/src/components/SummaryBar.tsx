@@ -1,6 +1,6 @@
 import React from "react";
 import { useGetSecuritiesSummary, getGetSecuritiesSummaryQueryKey } from "@workspace/api-client-react";
-import type { GetSecuritiesSummaryParams } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { GetSecuritiesSummaryParams } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface SummaryBarProps {

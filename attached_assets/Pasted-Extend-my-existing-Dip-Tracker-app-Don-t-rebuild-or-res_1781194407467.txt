@@ -1,0 +1,52 @@
+Extend my existing Dip Tracker app. Don't rebuild or restyle anything that already works — the dashboard, filters, Top Movers, and Scanner Results table stay exactly as they are. We're adding a valuation-and-fundamentals layer for stocks only (skip all crypto rows).
+The core concept: every fallen stock gets scored on two independent axes, producing a four-quadrant verdict.
+
+Axis 1 — Cheapness: is the stock cheap relative to its sector?
+Axis 2 — Fundamental momentum: are the underlying fundamentals stable/improving, or deteriorating?
+
+The product's whole purpose is separating overreactions (buy candidates) from justified declines (traps). The verdict must reflect that.
+Data sources (add alongside the existing Massive/Polygon integration):
+
+Financial Modeling Prep API (key in env var FMP_KEY): /ratios-ttm and /key-metrics-ttm for P/E, PEG, EV/EBITDA, price-to-FCF, debt-to-EBITDA; /profile for sector; /income-statement?period=quarter&limit=5 for quarterly revenue and gross margin history.
+Finnhub API (key in env var FINNHUB_KEY): /stock/recommendation for analyst buy/hold/sell counts; EPS estimate trend endpoint for forward-estimate revisions (if the estimate-revisions endpoint isn't available on free tier, degrade gracefully and compute Axis 2 from revenue trend, margin trend, and the debt gate only, with a note in the detail view).
+Cache per ticker for 1 hour in memory. Fetch lazily — only for stock tickers currently visible — to stay inside free-tier limits (~3–4 calls per ticker).
+
+Axis 1 — Cheapness score (pure function, sector medians in a config file):
+
+Hardcoded dict of sector median multiples (P/E, EV/EBITDA, P/FCF) for the 11 GICS sectors, commented for quarterly refresh.
+Each multiple vs sector median: >20% below = +1, within ±20% = 0, >20% above = −1.
+PEG overlay: <1 → +1; >2 → −1; missing/negative → skip.
+Unprofitable companies: fall back to EV/Revenue vs a hardcoded sector median, flag this in the detail view.
+Net score > 0 = "Cheap"; otherwise "Not Cheap".
+
+Axis 2 — Fundamental momentum score (pure function):
+
+Estimate revisions (weight 2x if available): forward EPS estimates trending up or flat over the last 30–90 days = positive; trending down = negative.
+Revenue trend: last 4 quarters — growing or accelerating = positive; decelerating two consecutive quarters or shrinking = negative.
+Margin direction: gross margin over last 4 quarters — stable or expanding = positive; compressing two consecutive quarters = negative.
+Balance-sheet gate: debt/EBITDA > 3 AND negative or declining FCF = automatic "Deteriorating" regardless of other signals.
+Weighted sum → "Stable/Improving" or "Deteriorating".
+
+Verdict mapping (the four quadrants):
+
+Cheap + Stable/Improving → "Potential Bargain" (green)
+Cheap + Deteriorating → "Falling Knife" (red)
+Not Cheap + Stable/Improving → "Repricing" (grey) — fell, but not yet cheap; watchlist material
+Not Cheap + Deteriorating → "Avoid" (dark red)
+
+UI changes (match the existing dark theme):
+
+Scanner Results: add a "Verdict" column with the quadrant badge for stock rows; crypto rows show "—". Subtle loading placeholder per row, no spinners.
+Clicking a stock row expands a detail panel with three sections:
+
+Cheapness: each multiple vs sector median with its individual tag.
+Fundamentals: estimate-revision direction (arrow + label), revenue trend as a small 4-quarter sparkline, margin direction arrow, debt gate status. Each marked positive/negative.
+Analysts: consensus label from buy/hold/sell counts, with raw counts.
+Plus a two-sentence plain-English explanation naming the decisive signals, e.g. "Trading 30% below sector on EV/EBITDA, but estimates have been cut 12% in 60 days and margins are compressing. Cheapness is being driven by deterioration, not overreaction."
+
+
+Top Movers stock cards get the same small verdict badge; crypto cards unchanged.
+Fine print under Scanner Results: "Verdicts are screening signals based on financial data, not financial advice. They cannot detect non-financial risks (litigation, fraud, disruption)."
+
+Edge cases: missing data on either axis → compute the verdict from available signals and list what's missing in the detail panel; if Axis 2 has no usable signals at all, show "Cheap — Unverified" / "Not Cheap — Unverified" instead of a quadrant verdict; API failures → "—" rather than breaking the table.
+Keep both scoring functions pure and separate from API/UI code, with all thresholds and sector medians in one config file for tuning.

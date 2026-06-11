@@ -144,6 +144,168 @@ export interface ErrorResponse {
   error: string;
 }
 
+/**
+ * How the multiple compares to sector median
+ */
+export type MultipleTag = typeof MultipleTag[keyof typeof MultipleTag];
+
+
+export const MultipleTag = {
+  cheap: 'cheap',
+  fair: 'fair',
+  expensive: 'expensive',
+  missing: 'missing',
+} as const;
+
+export interface MultipleResult {
+  /**
+     * Actual multiple value for this ticker
+     * @nullable
+     */
+  value?: number | null;
+  /** Hardcoded sector median used for comparison */
+  sectorMedian: number;
+  tag: MultipleTag;
+}
+
+export type CheapnessResultLabel = typeof CheapnessResultLabel[keyof typeof CheapnessResultLabel];
+
+
+export const CheapnessResultLabel = {
+  Cheap: 'Cheap',
+  Not_Cheap: 'Not Cheap',
+} as const;
+
+export interface CheapnessResult {
+  label: CheapnessResultLabel;
+  /** Raw cheapness score (positive = cheap) */
+  score: number;
+  pe: MultipleResult;
+  evEbitda: MultipleResult;
+  pFcf: MultipleResult;
+  peg?: MultipleResult | null;
+  /** Only present for unprofitable companies */
+  evRevenue?: MultipleResult | null;
+  isUnprofitable: boolean;
+  missingData: string[];
+}
+
+export type RevenueTrendDirection = typeof RevenueTrendDirection[keyof typeof RevenueTrendDirection];
+
+
+export const RevenueTrendDirection = {
+  growing: 'growing',
+  decelerating: 'decelerating',
+  shrinking: 'shrinking',
+  unknown: 'unknown',
+} as const;
+
+export interface RevenueTrend {
+  direction: RevenueTrendDirection;
+  /** Revenue values oldest→newest */
+  quarters: number[];
+}
+
+export type MarginTrendDirection = typeof MarginTrendDirection[keyof typeof MarginTrendDirection];
+
+
+export const MarginTrendDirection = {
+  stable: 'stable',
+  expanding: 'expanding',
+  compressing: 'compressing',
+  unknown: 'unknown',
+} as const;
+
+export interface MarginTrend {
+  direction: MarginTrendDirection;
+  /** Gross margin % oldest→newest */
+  quarters: number[];
+}
+
+export interface DebtGate {
+  triggered: boolean;
+  /** @nullable */
+  debtToEbitda?: number | null;
+  /** @nullable */
+  fcfTtm?: number | null;
+}
+
+/**
+ * Only present when available is true
+ */
+export type EstimateRevisionsDirection = typeof EstimateRevisionsDirection[keyof typeof EstimateRevisionsDirection];
+
+
+export const EstimateRevisionsDirection = {
+  up: 'up',
+  flat: 'flat',
+  down: 'down',
+} as const;
+
+export interface EstimateRevisions {
+  available: boolean;
+  /** Only present when available is true */
+  direction?: EstimateRevisionsDirection;
+}
+
+export type FundamentalsResultLabel = typeof FundamentalsResultLabel[keyof typeof FundamentalsResultLabel];
+
+
+export const FundamentalsResultLabel = {
+  'Stable/Improving': 'Stable/Improving',
+  Deteriorating: 'Deteriorating',
+} as const;
+
+export interface FundamentalsResult {
+  label: FundamentalsResultLabel;
+  score: number;
+  estimateRevisions: EstimateRevisions;
+  revenueTrend: RevenueTrend;
+  marginTrend: MarginTrend;
+  debtGate: DebtGate;
+  missingData: string[];
+}
+
+export interface AnalystCounts {
+  buy: number;
+  hold: number;
+  sell: number;
+  consensus: string;
+}
+
+/**
+ * @nullable
+ */
+export type TickerVerdictVerdict = typeof TickerVerdictVerdict[keyof typeof TickerVerdictVerdict] | null;
+
+
+export const TickerVerdictVerdict = {
+  Potential_Bargain: 'Potential Bargain',
+  Falling_Knife: 'Falling Knife',
+  Repricing: 'Repricing',
+  Avoid: 'Avoid',
+  'Cheap_—_Unverified': 'Cheap — Unverified',
+  'Not_Cheap_—_Unverified': 'Not Cheap — Unverified',
+  null: 'null',
+} as const;
+
+export interface TickerVerdict {
+  ticker: string;
+  /** @nullable */
+  verdict?: TickerVerdictVerdict;
+  cheapness: CheapnessResult;
+  fundamentals: FundamentalsResult;
+  analysts?: AnalystCounts | null;
+  explanation: string;
+  missingData: string[];
+}
+
+export type VerdictsResponseVerdicts = {[key: string]: TickerVerdict | null};
+
+export interface VerdictsResponse {
+  verdicts: VerdictsResponseVerdicts;
+}
+
 export type ListSecuritiesParams = {
 /**
  * Filter by asset type: equity or crypto
@@ -246,4 +408,11 @@ export const GetTopMoversAssetType = {
   equity: 'equity',
   crypto: 'crypto',
 } as const;
+
+export type GetVerdictsParams = {
+/**
+ * Comma-separated list of equity ticker symbols (max 30)
+ */
+tickers: string;
+};
 

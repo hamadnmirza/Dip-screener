@@ -113,3 +113,80 @@ export const GetLastUpdatedResponse = zod.object({
 })
 
 
+/**
+ * Returns cheapness and fundamental momentum scores, plus a four-quadrant verdict for each requested ticker. Crypto tickers are ignored. Results are cached for 1 hour per ticker.
+ * @summary Get valuation and fundamental verdicts for a batch of stock tickers
+ */
+export const GetVerdictsQueryParams = zod.object({
+  "tickers": zod.coerce.string().describe('Comma-separated list of equity ticker symbols (max 30)')
+})
+
+export const GetVerdictsResponse = zod.object({
+  "verdicts": zod.record(zod.string(), zod.union([zod.object({
+  "ticker": zod.string(),
+  "verdict": zod.enum(['Potential Bargain', 'Falling Knife', 'Repricing', 'Avoid', 'Cheap — Unverified', 'Not Cheap — Unverified', 'null']).nullish(),
+  "cheapness": zod.object({
+  "label": zod.enum(['Cheap', 'Not Cheap']),
+  "score": zod.number().describe('Raw cheapness score (positive = cheap)'),
+  "pe": zod.object({
+  "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
+  "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
+  "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
+}),
+  "evEbitda": zod.object({
+  "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
+  "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
+  "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
+}),
+  "pFcf": zod.object({
+  "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
+  "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
+  "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
+}),
+  "peg": zod.union([zod.object({
+  "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
+  "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
+  "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
+}),zod.null()]).optional(),
+  "evRevenue": zod.union([zod.object({
+  "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
+  "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
+  "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
+}),zod.null()]).optional().describe('Only present for unprofitable companies'),
+  "isUnprofitable": zod.boolean(),
+  "missingData": zod.array(zod.string())
+}),
+  "fundamentals": zod.object({
+  "label": zod.enum(['Stable/Improving', 'Deteriorating']),
+  "score": zod.number(),
+  "estimateRevisions": zod.object({
+  "available": zod.boolean(),
+  "direction": zod.enum(['up', 'flat', 'down']).optional().describe('Only present when available is true')
+}),
+  "revenueTrend": zod.object({
+  "direction": zod.enum(['growing', 'decelerating', 'shrinking', 'unknown']),
+  "quarters": zod.array(zod.number()).describe('Revenue values oldest→newest')
+}),
+  "marginTrend": zod.object({
+  "direction": zod.enum(['stable', 'expanding', 'compressing', 'unknown']),
+  "quarters": zod.array(zod.number()).describe('Gross margin % oldest→newest')
+}),
+  "debtGate": zod.object({
+  "triggered": zod.boolean(),
+  "debtToEbitda": zod.number().nullish(),
+  "fcfTtm": zod.number().nullish()
+}),
+  "missingData": zod.array(zod.string())
+}),
+  "analysts": zod.union([zod.object({
+  "buy": zod.number(),
+  "hold": zod.number(),
+  "sell": zod.number(),
+  "consensus": zod.string()
+}),zod.null()]).optional(),
+  "explanation": zod.string(),
+  "missingData": zod.array(zod.string())
+}),zod.null()]))
+})
+
+

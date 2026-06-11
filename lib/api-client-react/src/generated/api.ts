@@ -19,12 +19,14 @@ import type {
   ErrorResponse,
   GetSecuritiesSummaryParams,
   GetTopMoversParams,
+  GetVerdictsParams,
   HealthStatus,
   LastUpdated,
   ListSecuritiesParams,
   SecuritiesResponse,
   SecuritiesSummary,
-  TopMoversResponse
+  TopMoversResponse,
+  VerdictsResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -438,6 +440,91 @@ export function useGetLastUpdated<TData = Awaited<ReturnType<typeof getLastUpdat
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLastUpdatedQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetVerdictsUrl = (params: GetVerdictsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/verdicts?${stringifiedParams}` : `/api/verdicts`
+}
+
+/**
+ * Returns cheapness and fundamental momentum scores, plus a four-quadrant verdict for each requested ticker. Crypto tickers are ignored. Results are cached for 1 hour per ticker.
+ * @summary Get valuation and fundamental verdicts for a batch of stock tickers
+ */
+export const getVerdicts = async (params: GetVerdictsParams, options?: RequestInit): Promise<VerdictsResponse> => {
+
+  return customFetch<VerdictsResponse>(getGetVerdictsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVerdictsQueryKey = (params?: GetVerdictsParams,) => {
+    return [
+    `/api/verdicts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetVerdictsQueryOptions = <TData = Awaited<ReturnType<typeof getVerdicts>>, TError = ErrorType<ErrorResponse>>(params: GetVerdictsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVerdicts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVerdictsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVerdicts>>> = ({ signal }) => getVerdicts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVerdicts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVerdictsQueryResult = NonNullable<Awaited<ReturnType<typeof getVerdicts>>>
+export type GetVerdictsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get valuation and fundamental verdicts for a batch of stock tickers
+ */
+
+export function useGetVerdicts<TData = Awaited<ReturnType<typeof getVerdicts>>, TError = ErrorType<ErrorResponse>>(
+ params: GetVerdictsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVerdicts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVerdictsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

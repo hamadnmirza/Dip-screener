@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: securities
     description: Securities (equities and crypto) that have fallen in price
+  - name: verdicts
+    description: Valuation and fundamental momentum verdicts for stock tickers
 paths:
   /healthz:
     get:
@@ -152,6 +154,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LastUpdated"
+
+  /verdicts:
+    get:
+      operationId: getVerdicts
+      tags: [verdicts]
+      summary: Get valuation and fundamental verdicts for a batch of stock tickers
+      description: Returns cheapness and fundamental momentum scores, plus a four-quadrant verdict for each requested ticker. Crypto tickers are ignored. Results are cached for 1 hour per ticker.
+      parameters:
+        - name: tickers
+          in: query
+          required: true
+          description: "Comma-separated list of equity ticker symbols (max 30)"
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Map of ticker → verdict result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerdictsResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -319,3 +354,180 @@ components:
       properties:
         error:
           type: string
+
+    # ── Verdict schemas ──────────────────────────────────────────────────────
+
+    MultipleTag:
+      type: string
+      enum: [cheap, fair, expensive, missing]
+      description: "How the multiple compares to sector median"
+
+    MultipleResult:
+      type: object
+      required: [sectorMedian, tag]
+      properties:
+        value:
+          type: ["number", "null"]
+          description: Actual multiple value for this ticker
+        sectorMedian:
+          type: number
+          description: Hardcoded sector median used for comparison
+        tag:
+          $ref: "#/components/schemas/MultipleTag"
+
+    CheapnessResult:
+      type: object
+      required: [label, score, pe, evEbitda, pFcf, isUnprofitable, missingData]
+      properties:
+        label:
+          type: string
+          enum: [Cheap, Not Cheap]
+        score:
+          type: number
+          description: Raw cheapness score (positive = cheap)
+        pe:
+          $ref: "#/components/schemas/MultipleResult"
+        evEbitda:
+          $ref: "#/components/schemas/MultipleResult"
+        pFcf:
+          $ref: "#/components/schemas/MultipleResult"
+        peg:
+          oneOf:
+            - $ref: "#/components/schemas/MultipleResult"
+            - type: "null"
+        evRevenue:
+          oneOf:
+            - $ref: "#/components/schemas/MultipleResult"
+            - type: "null"
+          description: Only present for unprofitable companies
+        isUnprofitable:
+          type: boolean
+        missingData:
+          type: array
+          items:
+            type: string
+
+    RevenueTrend:
+      type: object
+      required: [direction, quarters]
+      properties:
+        direction:
+          type: string
+          enum: [growing, decelerating, shrinking, unknown]
+        quarters:
+          type: array
+          items:
+            type: number
+          description: Revenue values oldest→newest
+
+    MarginTrend:
+      type: object
+      required: [direction, quarters]
+      properties:
+        direction:
+          type: string
+          enum: [stable, expanding, compressing, unknown]
+        quarters:
+          type: array
+          items:
+            type: number
+          description: Gross margin % oldest→newest
+
+    DebtGate:
+      type: object
+      required: [triggered]
+      properties:
+        triggered:
+          type: boolean
+        debtToEbitda:
+          type: ["number", "null"]
+        fcfTtm:
+          type: ["number", "null"]
+
+    EstimateRevisions:
+      type: object
+      required: [available]
+      properties:
+        available:
+          type: boolean
+        direction:
+          type: string
+          enum: [up, flat, down]
+          description: Only present when available is true
+
+    FundamentalsResult:
+      type: object
+      required: [label, score, estimateRevisions, revenueTrend, marginTrend, debtGate, missingData]
+      properties:
+        label:
+          type: string
+          enum: [Stable/Improving, Deteriorating]
+        score:
+          type: number
+        estimateRevisions:
+          $ref: "#/components/schemas/EstimateRevisions"
+        revenueTrend:
+          $ref: "#/components/schemas/RevenueTrend"
+        marginTrend:
+          $ref: "#/components/schemas/MarginTrend"
+        debtGate:
+          $ref: "#/components/schemas/DebtGate"
+        missingData:
+          type: array
+          items:
+            type: string
+
+    AnalystCounts:
+      type: object
+      required: [buy, hold, sell, consensus]
+      properties:
+        buy:
+          type: integer
+        hold:
+          type: integer
+        sell:
+          type: integer
+        consensus:
+          type: string
+
+    TickerVerdict:
+      type: object
+      required: [ticker, cheapness, fundamentals, explanation, missingData]
+      properties:
+        ticker:
+          type: string
+        verdict:
+          type: ["string", "null"]
+          enum:
+            - Potential Bargain
+            - Falling Knife
+            - Repricing
+            - Avoid
+            - "Cheap \u2014 Unverified"
+            - "Not Cheap \u2014 Unverified"
+            - "null"
+        cheapness:
+          $ref: "#/components/schemas/CheapnessResult"
+        fundamentals:
+          $ref: "#/components/schemas/FundamentalsResult"
+        analysts:
+          oneOf:
+            - $ref: "#/components/schemas/AnalystCounts"
+            - type: "null"
+        explanation:
+          type: string
+        missingData:
+          type: array
+          items:
+            type: string
+
+    VerdictsResponse:
+      type: object
+      required: [verdicts]
+      properties:
+        verdicts:
+          type: object
+          additionalProperties:
+            oneOf:
+              - $ref: "#/components/schemas/TickerVerdict"
+              - type: "null"

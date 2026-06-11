@@ -11,7 +11,7 @@ import type {
   GetSecuritiesSummaryTimePeriod,
   GetTopMoversTimePeriod,
   GetTopMoversAssetType
-} from "@workspace/api-client-react/src/generated/api.schemas";
+} from "@workspace/api-client-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
@@ -125,6 +125,9 @@ export default function Home() {
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-foreground mb-3 tracking-tight">Scanner Results</h2>
           <SecuritiesTable params={listParams} />
+          <p className="mt-3 text-[11px] text-muted-foreground/40 leading-relaxed">
+            Verdicts are screening signals based on financial data, not financial advice. They cannot detect non-financial risks (litigation, fraud, disruption). Click any equity row to expand its fundamental detail. Sector medians are hardcoded estimates refreshed quarterly.
+          </p>
         </div>
 
         <LastUpdatedBar />

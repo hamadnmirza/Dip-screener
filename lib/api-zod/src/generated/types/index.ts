@@ -6,14 +6,23 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './analystCounts';
+export * from './cheapnessResult';
+export * from './cheapnessResultLabel';
+export * from './debtGate';
 export * from './dropRangeCount';
 export * from './dropRangeCountRange';
 export * from './errorResponse';
+export * from './estimateRevisions';
+export * from './estimateRevisionsDirection';
+export * from './fundamentalsResult';
+export * from './fundamentalsResultLabel';
 export * from './getSecuritiesSummaryParams';
 export * from './getSecuritiesSummaryTimePeriod';
 export * from './getTopMoversAssetType';
 export * from './getTopMoversParams';
 export * from './getTopMoversTimePeriod';
+export * from './getVerdictsParams';
 export * from './healthStatus';
 export * from './lastUpdated';
 export * from './listSecuritiesAssetType';
@@ -21,6 +30,12 @@ export * from './listSecuritiesDropRange';
 export * from './listSecuritiesMarket';
 export * from './listSecuritiesParams';
 export * from './listSecuritiesTimePeriod';
+export * from './marginTrend';
+export * from './marginTrendDirection';
+export * from './multipleResult';
+export * from './multipleTag';
+export * from './revenueTrend';
+export * from './revenueTrendDirection';
 export * from './securitiesResponse';
 export * from './securitiesSummary';
 export * from './securitiesSummaryByAssetType';
@@ -30,5 +45,9 @@ export * from './security';
 export * from './securityAssetType';
 export * from './securityMarket';
 export * from './securityTimePeriod';
+export * from './tickerVerdict';
+export * from './tickerVerdictVerdict';
 export * from './topMoversResponse';
 export * from './topMoversResponseTimePeriod';
+export * from './verdictsResponse';
+export * from './verdictsResponseVerdicts';
