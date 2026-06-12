@@ -23,6 +23,7 @@ import type {
   HealthStatus,
   LastUpdated,
   ListSecuritiesParams,
+  NewsResponse,
   SecuritiesResponse,
   SecuritiesSummary,
   TopMoversResponse,
@@ -107,6 +108,84 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getHealthCheckQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetTickerNewsUrl = (ticker: string,) => {
+
+
+
+
+  return `/api/news/${ticker}`
+}
+
+/**
+ * Returns up to 3 most recent company news articles from the last 7 days. Cached per ticker for 30 minutes. Stock tickers only — crypto returns empty.
+ * @summary Recent news articles for a ticker
+ */
+export const getTickerNews = async (ticker: string, options?: RequestInit): Promise<NewsResponse> => {
+
+  return customFetch<NewsResponse>(getGetTickerNewsUrl(ticker),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTickerNewsQueryKey = (ticker: string,) => {
+    return [
+    `/api/news/${ticker}`
+    ] as const;
+    }
+
+
+export const getGetTickerNewsQueryOptions = <TData = Awaited<ReturnType<typeof getTickerNews>>, TError = ErrorType<ErrorResponse>>(ticker: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTickerNews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTickerNewsQueryKey(ticker);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTickerNews>>> = ({ signal }) => getTickerNews(ticker, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(ticker), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTickerNews>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTickerNewsQueryResult = NonNullable<Awaited<ReturnType<typeof getTickerNews>>>
+export type GetTickerNewsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Recent news articles for a ticker
+ */
+
+export function useGetTickerNews<TData = Awaited<ReturnType<typeof getTickerNews>>, TError = ErrorType<ErrorResponse>>(
+ ticker: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTickerNews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTickerNewsQueryOptions(ticker,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

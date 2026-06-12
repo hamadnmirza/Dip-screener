@@ -253,6 +253,60 @@ export async function fetchEstimateRevisions(ticker: string): Promise<EstimateRe
   return result;
 }
 
+// ── News ──────────────────────────────────────────────────────────────────────
+
+const NEWS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const NEWS_MAX_ARTICLES = 3;
+const NEWS_LOOKBACK_DAYS = 7;
+
+interface FinnhubNewsArticle {
+  headline: string;
+  source: string;
+  datetime: number; // unix timestamp (seconds)
+  url: string;
+}
+
+export interface NewsArticle {
+  headline: string;
+  source: string;
+  publishedAt: string; // ISO 8601
+  url: string;
+}
+
+export async function fetchTickerNews(ticker: string): Promise<NewsArticle[]> {
+  const cacheKey = `news:${ticker}`;
+  const cached = getCached<NewsArticle[]>(cacheKey);
+  if (cached) return cached;
+
+  const to = new Date();
+  const from = new Date(to.getTime() - NEWS_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+  const data = await finnhubFetch<FinnhubNewsArticle[]>(
+    `/company-news?symbol=${ticker}&from=${fmt(from)}&to=${fmt(to)}`
+  );
+
+  if (!Array.isArray(data)) {
+    setCache(cacheKey, []);
+    return [];
+  }
+
+  const articles: NewsArticle[] = data
+    .filter((a) => a.headline && a.url)
+    .sort((a, b) => b.datetime - a.datetime)
+    .slice(0, NEWS_MAX_ARTICLES)
+    .map((a) => ({
+      headline: a.headline,
+      source: a.source ?? "",
+      publishedAt: new Date(a.datetime * 1000).toISOString(),
+      url: a.url,
+    }));
+
+  // Use shorter TTL key so news caches independently of valuation (30 min)
+  finnhubCache.set(cacheKey, { data: articles, expiresAt: Date.now() + NEWS_CACHE_TTL_MS });
+  return articles;
+}
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 function num(v: number | null | undefined): number | null {

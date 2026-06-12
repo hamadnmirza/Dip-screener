@@ -18,6 +18,24 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * Returns up to 3 most recent company news articles from the last 7 days. Cached per ticker for 30 minutes. Stock tickers only — crypto returns empty.
+ * @summary Recent news articles for a ticker
+ */
+export const GetTickerNewsParams = zod.object({
+  "ticker": zod.coerce.string().describe('Stock ticker symbol (e.g. AAPL, MSFT)')
+})
+
+export const GetTickerNewsResponse = zod.object({
+  "articles": zod.array(zod.object({
+  "headline": zod.string(),
+  "source": zod.string(),
+  "publishedAt": zod.string().describe('ISO 8601 datetime string'),
+  "url": zod.string()
+}))
+})
+
+
+/**
  * Returns a filtered list of equities and crypto that have dropped by specified criteria. Data refreshes every 15 minutes.
  * @summary List securities that have fallen in price
  */

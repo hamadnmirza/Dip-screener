@@ -5,6 +5,18 @@
  * API specification for Dip Tracker - securities that have fallen in price
  * OpenAPI spec version: 0.1.0
  */
+export interface NewsArticle {
+  headline: string;
+  source: string;
+  /** ISO 8601 datetime string */
+  publishedAt: string;
+  url: string;
+}
+
+export interface NewsResponse {
+  articles: NewsArticle[];
+}
+
 export interface HealthStatus {
   status: string;
 }

@@ -34,6 +34,8 @@ export * from './listSecuritiesParams';
 export * from './listSecuritiesTimePeriod';
 export * from './multipleResult';
 export * from './multipleTag';
+export * from './newsArticle';
+export * from './newsResponse';
 export * from './roicResult';
 export * from './roicResultFlag';
 export * from './securitiesResponse';

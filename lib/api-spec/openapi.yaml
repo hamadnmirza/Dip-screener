@@ -14,6 +14,8 @@ tags:
     description: Securities (equities and crypto) that have fallen in price
   - name: verdicts
     description: Valuation and fundamental momentum verdicts for stock tickers
+  - name: news
+    description: Recent company news articles for a ticker
 paths:
   /healthz:
     get:
@@ -28,6 +30,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /news/{ticker}:
+    get:
+      operationId: getTickerNews
+      tags: [news]
+      summary: Recent news articles for a ticker
+      description: Returns up to 3 most recent company news articles from the last 7 days. Cached per ticker for 30 minutes. Stock tickers only — crypto returns empty.
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: Stock ticker symbol (e.g. AAPL, MSFT)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: News articles for the ticker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /securities:
     get:
@@ -190,6 +219,29 @@ paths:
 
 components:
   schemas:
+    NewsArticle:
+      type: object
+      required: [headline, source, publishedAt, url]
+      properties:
+        headline:
+          type: string
+        source:
+          type: string
+        publishedAt:
+          type: string
+          description: ISO 8601 datetime string
+        url:
+          type: string
+
+    NewsResponse:
+      type: object
+      required: [articles]
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewsArticle"
+
     HealthStatus:
       type: object
       properties:

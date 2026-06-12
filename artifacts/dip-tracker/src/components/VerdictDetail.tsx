@@ -7,7 +7,9 @@ import type {
   EstimateRevisions,
   RoicResult,
   DeResult,
+  NewsArticle,
 } from "@workspace/api-client-react";
+import { useGetTickerNews } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VerdictBadge } from "./VerdictBadge";
 
@@ -320,6 +322,72 @@ function DeSection({ data, verdictShifted, verdictBeforeDe, verdict }: {
   );
 }
 
+// ── News section ──────────────────────────────────────────────────────────────
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function NewsArticleRow({ article }: { article: NewsArticle }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-2 border-b border-border/30 last:border-0">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="text-xs text-foreground/90 leading-snug line-clamp-2">{article.headline}</p>
+        <p className="text-[10px] text-muted-foreground/50">
+          {article.source} · {timeAgo(article.publishedAt)}
+        </p>
+      </div>
+      <a
+        href={article.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="shrink-0 mt-0.5 text-[10px] font-medium text-sky-400 hover:text-sky-300 border border-sky-500/30 hover:border-sky-400/50 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap"
+        aria-label={`Open article: ${article.headline}`}
+      >
+        ↗ Open
+      </a>
+    </div>
+  );
+}
+
+function NewsSection({ ticker }: { ticker: string }) {
+  const { data, isLoading } = useGetTickerNews(ticker);
+  const articles = data?.articles ?? [];
+
+  return (
+    <div className="pt-3 border-t border-border/50">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+        Recent News
+      </span>
+
+      {isLoading && (
+        <div className="mt-2 space-y-2">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-8 w-full bg-muted/20" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && articles.length === 0 && (
+        <p className="mt-2 text-xs text-muted-foreground/40 italic">No recent news in the last 7 days.</p>
+      )}
+
+      {!isLoading && articles.length > 0 && (
+        <div className="mt-2">
+          {articles.map((article) => (
+            <NewsArticleRow key={article.url} article={article} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Analyst section ───────────────────────────────────────────────────────────
 
 function AnalystsSection({
@@ -441,6 +509,8 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
           Data unavailable: {data.missingData.join(", ")}
         </p>
       )}
+
+      <NewsSection ticker={ticker} />
     </div>
   );
 }
