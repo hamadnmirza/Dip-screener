@@ -1,13 +1,14 @@
 ---
-name: FMP v3 for ROIC
-description: FMP stable API doesn't have roicTTM field; must use v3.
+name: ROIC source — use Finnhub roiTTM, not FMP
+description: FMP free plan blocks /key-metrics-ttm entirely. Use Finnhub roiTTM already fetched.
 ---
 
 ## Rule
-FMP stable API (https://financialmodelingprep.com/stable) uses verbose field names and does NOT return `roicTTM`. The v3 API (https://financialmodelingprep.com/api/v3/key-metrics-ttm/{ticker}) returns `roicTTM` as a decimal.
+Do NOT use FMP for ROIC. The FMP free plan returns "Limit Reach" on `/key-metrics-ttm` regardless of rate limiting. Finnhub's `/stock/metric?metric=all` (already fetched and cached for P/E and P/S) also returns `roiTTM` in **percent form** (e.g. 26.33 = 26.33%).
 
 ## Implementation
-fmp.ts has a separate `fmpV3Fetch` helper pointing to `FMP_V3_BASE` = `https://financialmodelingprep.com/api/v3`. `fetchFmpRoic` uses this helper. Other FMP functions continue using the stable API.
+`FinnhubBasicMetrics.roiTTM` → parsed in `fetchFinnhubValuation` as `roiTtm` on `FinnhubValuationData`. Degenerate guard: `|roi| > 200` → null. In `verdicts.ts`, divide by 100 before passing to `computeRoicFlag` (which expects decimal form matching ROIC_THRESHOLDS).
 
 ## Why
-When this was first attempted with the stable API the field was absent. Degenerate ROIC values (|roic| > 2.0, from negative invested capital) are filtered to null at the fetch layer.
+Discovered when FMP returned "Limit Reach" in production despite a valid API key. Finnhub already returns an equivalent field in the same cached call — zero extra API calls needed.
+

@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
 import { fetchFinnhubValuation, fetchFinnhubRecommendations, fetchEstimateRevisions } from "../lib/finnhub";
-import { fetchFmpRoic } from "../lib/fmp";
 import {
   scoreCheapness,
   scoreFundamentals,
@@ -47,11 +46,10 @@ router.get("/verdicts", async (req, res) => {
 
 async function computeTickerVerdict(ticker: string): Promise<VerdictResult | null> {
   try {
-    const [valuation, analystData, revisions, fmpRoic] = await Promise.all([
+    const [valuation, analystData, revisions] = await Promise.all([
       fetchFinnhubValuation(ticker),
       fetchFinnhubRecommendations(ticker),
       fetchEstimateRevisions(ticker),
-      fetchFmpRoic(ticker),
     ]);
 
     if (!valuation) return null;
@@ -72,8 +70,9 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
     // Base verdict from cheapness alone
     const verdictBase = computeVerdict(cheapness, fundamentals);
 
-    // ROIC quality modifier
-    const roic = computeRoicFlag(fmpRoic?.roicTTM ?? null, valuation.sector);
+    // ROIC quality modifier — roiTtm from Finnhub is percent (e.g. 26.33), convert to decimal
+    const roicDecimal = valuation.roiTtm !== null ? valuation.roiTtm / 100 : null;
+    const roic = computeRoicFlag(roicDecimal, valuation.sector);
     const roicMod = verdictBase !== null
       ? applyRoicModifier(verdictBase, roic)
       : { verdict: verdictBase as never, shifted: false };

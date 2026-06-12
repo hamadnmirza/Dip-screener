@@ -69,6 +69,8 @@ interface FinnhubBasicMetrics {
   grossMarginTTM?: number | null;
   revenueGrowthTTMYoy?: number | null;
   netProfitMarginTTM?: number | null;
+  /** Return on Investment TTM — percent form (e.g. 26.33 = 26.33%). Proxy for ROIC. */
+  roiTTM?: number | null;
 }
 
 interface FinnhubMetricResponse {
@@ -116,6 +118,12 @@ export interface FinnhubValuationData {
   sector: string | null;
   /** True when the company has negative or no earnings */
   isUnprofitable: boolean;
+  /**
+   * Return on Investment TTM — percent form (e.g. 26.33 = 26.33%).
+   * Used as a proxy for ROIC. Divide by 100 before comparing against decimal thresholds.
+   * Null when unavailable or degenerate (|roi| > 200%).
+   */
+  roiTtm: number | null;
 }
 
 export interface FinnhubAnalystData {
@@ -147,6 +155,10 @@ export async function fetchFinnhubValuation(ticker: string): Promise<FinnhubValu
   const pe = num(m.peBasicExclExtraTTM);
   const isUnprofitable = pe === null || pe <= 0;
 
+  const rawRoi = num(m.roiTTM);
+  // Filter degenerate values (negative equity → huge |ROI|)
+  const roiTtm = rawRoi !== null && Math.abs(rawRoi) <= 200 ? rawRoi : null;
+
   const result: FinnhubValuationData = {
     pe: pe !== null && pe > 0 ? pe : null,
     ps: num(m.psAnnual),
@@ -154,6 +166,7 @@ export async function fetchFinnhubValuation(ticker: string): Promise<FinnhubValu
     revenueGrowthYoy: num(m.revenueGrowthTTMYoy),
     sector: profileRes?.finnhubIndustry ?? null,
     isUnprofitable,
+    roiTtm,
   };
 
   setCache(cacheKey, result);
