@@ -133,26 +133,11 @@ export const GetVerdictsResponse = zod.object({
   "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
   "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
 }),
-  "evEbitda": zod.object({
+  "ps": zod.object({
   "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
   "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
   "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
-}),
-  "pFcf": zod.object({
-  "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
-  "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
-  "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
-}),
-  "peg": zod.union([zod.object({
-  "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
-  "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
-  "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
-}),zod.null()]).optional(),
-  "evRevenue": zod.union([zod.object({
-  "value": zod.number().nullish().describe('Actual multiple value for this ticker'),
-  "sectorMedian": zod.number().describe('Hardcoded sector median used for comparison'),
-  "tag": zod.enum(['cheap', 'fair', 'expensive', 'missing']).describe('How the multiple compares to sector median')
-}),zod.null()]).optional().describe('Only present for unprofitable companies'),
+}).describe('Price-to-Sales vs sector median'),
   "isUnprofitable": zod.boolean(),
   "missingData": zod.array(zod.string())
 }),
@@ -163,19 +148,8 @@ export const GetVerdictsResponse = zod.object({
   "available": zod.boolean(),
   "direction": zod.enum(['up', 'flat', 'down']).optional().describe('Only present when available is true')
 }),
-  "revenueTrend": zod.object({
-  "direction": zod.enum(['growing', 'decelerating', 'shrinking', 'unknown']),
-  "quarters": zod.array(zod.number()).describe('Revenue values oldest→newest')
-}),
-  "marginTrend": zod.object({
-  "direction": zod.enum(['stable', 'expanding', 'compressing', 'unknown']),
-  "quarters": zod.array(zod.number()).describe('Gross margin % oldest→newest')
-}),
-  "debtGate": zod.object({
-  "triggered": zod.boolean(),
-  "debtToEbitda": zod.number().nullish(),
-  "fcfTtm": zod.number().nullish()
-}),
+  "revenueGrowthYoy": zod.number().nullable().describe('Revenue growth year-over-year TTM (percent, e.g. 70.68)'),
+  "grossMarginTtm": zod.number().nullable().describe('Gross margin TTM (percent, e.g. 74.15) — informational'),
   "missingData": zod.array(zod.string())
 }),
   "analysts": zod.union([zod.object({

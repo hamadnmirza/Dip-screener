@@ -181,53 +181,10 @@ export interface CheapnessResult {
   /** Raw cheapness score (positive = cheap) */
   score: number;
   pe: MultipleResult;
-  evEbitda: MultipleResult;
-  pFcf: MultipleResult;
-  peg?: MultipleResult | null;
-  /** Only present for unprofitable companies */
-  evRevenue?: MultipleResult | null;
+  /** Price-to-Sales vs sector median */
+  ps: MultipleResult;
   isUnprofitable: boolean;
   missingData: string[];
-}
-
-export type RevenueTrendDirection = typeof RevenueTrendDirection[keyof typeof RevenueTrendDirection];
-
-
-export const RevenueTrendDirection = {
-  growing: 'growing',
-  decelerating: 'decelerating',
-  shrinking: 'shrinking',
-  unknown: 'unknown',
-} as const;
-
-export interface RevenueTrend {
-  direction: RevenueTrendDirection;
-  /** Revenue values oldest→newest */
-  quarters: number[];
-}
-
-export type MarginTrendDirection = typeof MarginTrendDirection[keyof typeof MarginTrendDirection];
-
-
-export const MarginTrendDirection = {
-  stable: 'stable',
-  expanding: 'expanding',
-  compressing: 'compressing',
-  unknown: 'unknown',
-} as const;
-
-export interface MarginTrend {
-  direction: MarginTrendDirection;
-  /** Gross margin % oldest→newest */
-  quarters: number[];
-}
-
-export interface DebtGate {
-  triggered: boolean;
-  /** @nullable */
-  debtToEbitda?: number | null;
-  /** @nullable */
-  fcfTtm?: number | null;
 }
 
 /**
@@ -260,9 +217,16 @@ export interface FundamentalsResult {
   label: FundamentalsResultLabel;
   score: number;
   estimateRevisions: EstimateRevisions;
-  revenueTrend: RevenueTrend;
-  marginTrend: MarginTrend;
-  debtGate: DebtGate;
+  /**
+     * Revenue growth year-over-year TTM (percent, e.g. 70.68)
+     * @nullable
+     */
+  revenueGrowthYoy: number | null;
+  /**
+     * Gross margin TTM (percent, e.g. 74.15) — informational
+     * @nullable
+     */
+  grossMarginTtm: number | null;
   missingData: string[];
 }
 

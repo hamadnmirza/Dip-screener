@@ -5,18 +5,22 @@
  * API specification for Dip Tracker - securities that have fallen in price
  * OpenAPI spec version: 0.1.0
  */
-import type { DebtGate } from './debtGate';
 import type { EstimateRevisions } from './estimateRevisions';
 import type { FundamentalsResultLabel } from './fundamentalsResultLabel';
-import type { MarginTrend } from './marginTrend';
-import type { RevenueTrend } from './revenueTrend';
 
 export interface FundamentalsResult {
   label: FundamentalsResultLabel;
   score: number;
   estimateRevisions: EstimateRevisions;
-  revenueTrend: RevenueTrend;
-  marginTrend: MarginTrend;
-  debtGate: DebtGate;
+  /**
+     * Revenue growth year-over-year TTM (percent, e.g. 70.68)
+     * @nullable
+     */
+  revenueGrowthYoy: number | null;
+  /**
+     * Gross margin TTM (percent, e.g. 74.15) — informational
+     * @nullable
+     */
+  grossMarginTtm: number | null;
   missingData: string[];
 }

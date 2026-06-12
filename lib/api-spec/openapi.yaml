@@ -377,7 +377,7 @@ components:
 
     CheapnessResult:
       type: object
-      required: [label, score, pe, evEbitda, pFcf, isUnprofitable, missingData]
+      required: [label, score, pe, ps, isUnprofitable, missingData]
       properties:
         label:
           type: string
@@ -387,62 +387,15 @@ components:
           description: Raw cheapness score (positive = cheap)
         pe:
           $ref: "#/components/schemas/MultipleResult"
-        evEbitda:
+        ps:
           $ref: "#/components/schemas/MultipleResult"
-        pFcf:
-          $ref: "#/components/schemas/MultipleResult"
-        peg:
-          oneOf:
-            - $ref: "#/components/schemas/MultipleResult"
-            - type: "null"
-        evRevenue:
-          oneOf:
-            - $ref: "#/components/schemas/MultipleResult"
-            - type: "null"
-          description: Only present for unprofitable companies
+          description: Price-to-Sales vs sector median
         isUnprofitable:
           type: boolean
         missingData:
           type: array
           items:
             type: string
-
-    RevenueTrend:
-      type: object
-      required: [direction, quarters]
-      properties:
-        direction:
-          type: string
-          enum: [growing, decelerating, shrinking, unknown]
-        quarters:
-          type: array
-          items:
-            type: number
-          description: Revenue values oldest→newest
-
-    MarginTrend:
-      type: object
-      required: [direction, quarters]
-      properties:
-        direction:
-          type: string
-          enum: [stable, expanding, compressing, unknown]
-        quarters:
-          type: array
-          items:
-            type: number
-          description: Gross margin % oldest→newest
-
-    DebtGate:
-      type: object
-      required: [triggered]
-      properties:
-        triggered:
-          type: boolean
-        debtToEbitda:
-          type: ["number", "null"]
-        fcfTtm:
-          type: ["number", "null"]
 
     EstimateRevisions:
       type: object
@@ -457,7 +410,7 @@ components:
 
     FundamentalsResult:
       type: object
-      required: [label, score, estimateRevisions, revenueTrend, marginTrend, debtGate, missingData]
+      required: [label, score, estimateRevisions, revenueGrowthYoy, grossMarginTtm, missingData]
       properties:
         label:
           type: string
@@ -466,12 +419,12 @@ components:
           type: number
         estimateRevisions:
           $ref: "#/components/schemas/EstimateRevisions"
-        revenueTrend:
-          $ref: "#/components/schemas/RevenueTrend"
-        marginTrend:
-          $ref: "#/components/schemas/MarginTrend"
-        debtGate:
-          $ref: "#/components/schemas/DebtGate"
+        revenueGrowthYoy:
+          type: ["number", "null"]
+          description: Revenue growth year-over-year TTM (percent, e.g. 70.68)
+        grossMarginTtm:
+          type: ["number", "null"]
+          description: Gross margin TTM (percent, e.g. 74.15) — informational
         missingData:
           type: array
           items:

@@ -1,6 +1,11 @@
 /**
  * Finnhub API client.
- * Fetches analyst recommendations and EPS estimate trends.
+ * - /stock/metric       → valuation multiples + growth metrics (P/E, P/S, revenue growth, gross margin)
+ * - /stock/profile2     → industry classification
+ * - /stock/recommendation → analyst buy/hold/sell counts
+ * - /stock/eps-estimate → EPS estimate trend for revision direction
+ *
+ * No daily request cap on the free tier.
  * Results are cached per ticker for 1 hour.
  */
 
@@ -49,8 +54,7 @@ async function finnhubFetch<T>(path: string): Promise<T | null> {
       logger.warn({ status: res.status, path }, "Finnhub API error");
       return null;
     }
-    const json = await res.json();
-    return json as T;
+    return (await res.json()) as T;
   } catch (err) {
     logger.warn({ path, err }, "Finnhub fetch failed");
     return null;
@@ -58,6 +62,24 @@ async function finnhubFetch<T>(path: string): Promise<T | null> {
 }
 
 // ── Response shapes ───────────────────────────────────────────────────────────
+
+interface FinnhubBasicMetrics {
+  peBasicExclExtraTTM?: number | null;
+  psAnnual?: number | null;
+  grossMarginTTM?: number | null;
+  revenueGrowthTTMYoy?: number | null;
+  netProfitMarginTTM?: number | null;
+}
+
+interface FinnhubMetricResponse {
+  metric: FinnhubBasicMetrics;
+  symbol: string;
+}
+
+interface FinnhubProfile2 {
+  finnhubIndustry?: string | null;
+  name?: string | null;
+}
 
 interface FinnhubRecommendation {
   buy: number;
@@ -70,11 +92,7 @@ interface FinnhubRecommendation {
 
 interface FinnhubEpsEstimate {
   epsAvg: number;
-  epsHigh: number;
-  epsLow: number;
-  numberAnalysts: number;
   period: string;
-  year: number;
 }
 
 interface FinnhubEpsEstimateResponse {
@@ -85,6 +103,21 @@ interface FinnhubEpsEstimateResponse {
 
 // ── Public data types ─────────────────────────────────────────────────────────
 
+export interface FinnhubValuationData {
+  /** P/E TTM (null for unprofitable companies) */
+  pe: number | null;
+  /** Price-to-Sales (annual) */
+  ps: number | null;
+  /** Gross margin TTM (percent, e.g. 74.15) */
+  grossMarginTtm: number | null;
+  /** Revenue growth YoY TTM (percent, e.g. 70.68) */
+  revenueGrowthYoy: number | null;
+  /** Finnhub industry string, used for sector median lookup */
+  sector: string | null;
+  /** True when the company has negative or no earnings */
+  isUnprofitable: boolean;
+}
+
 export interface FinnhubAnalystData {
   buy: number;
   hold: number;
@@ -92,6 +125,40 @@ export interface FinnhubAnalystData {
 }
 
 // ── Fetch functions ───────────────────────────────────────────────────────────
+
+/**
+ * Fetches valuation multiples and growth metrics from Finnhub /stock/metric.
+ * Combined with /stock/profile2 for sector classification.
+ * No daily cap on the free tier — safe to call for all visible equity tickers.
+ */
+export async function fetchFinnhubValuation(ticker: string): Promise<FinnhubValuationData | null> {
+  const cacheKey = `valuation:${ticker}`;
+  const cached = getCached<FinnhubValuationData>(cacheKey);
+  if (cached) return cached;
+
+  const [metricRes, profileRes] = await Promise.all([
+    finnhubFetch<FinnhubMetricResponse>(`/stock/metric?symbol=${ticker}&metric=all`),
+    finnhubFetch<FinnhubProfile2>(`/stock/profile2?symbol=${ticker}`),
+  ]);
+
+  if (!metricRes?.metric) return null;
+
+  const m = metricRes.metric;
+  const pe = num(m.peBasicExclExtraTTM);
+  const isUnprofitable = pe === null || pe <= 0;
+
+  const result: FinnhubValuationData = {
+    pe: pe !== null && pe > 0 ? pe : null,
+    ps: num(m.psAnnual),
+    grossMarginTtm: num(m.grossMarginTTM),
+    revenueGrowthYoy: num(m.revenueGrowthTTMYoy),
+    sector: profileRes?.finnhubIndustry ?? null,
+    isUnprofitable,
+  };
+
+  setCache(cacheKey, result);
+  return result;
+}
 
 export async function fetchFinnhubRecommendations(ticker: string): Promise<FinnhubAnalystData | null> {
   const cacheKey = `rec:${ticker}`;
@@ -101,7 +168,6 @@ export async function fetchFinnhubRecommendations(ticker: string): Promise<Finnh
   const data = await finnhubFetch<FinnhubRecommendation[]>(`/stock/recommendation?symbol=${ticker}`);
   if (!data || data.length === 0) return null;
 
-  // Use the most recent recommendation period
   const latest = data[0];
   const result: FinnhubAnalystData = {
     buy: (latest.buy ?? 0) + (latest.strongBuy ?? 0),
@@ -114,28 +180,25 @@ export async function fetchFinnhubRecommendations(ticker: string): Promise<Finnh
 }
 
 /**
- * Fetches EPS estimate trend to derive estimate revision direction.
- * Uses quarterly consensus estimates — compares most recent to previous period.
- * Degrades gracefully if the endpoint is unavailable on the free tier.
+ * Fetches EPS estimate trend to derive revision direction.
+ * Degrades gracefully if unavailable on the free tier.
  */
 export async function fetchEstimateRevisions(ticker: string): Promise<EstimateRevisions> {
   const cacheKey = `eps:${ticker}`;
   const cached = getCached<EstimateRevisions>(cacheKey);
   if (cached) return cached;
 
-  const data = await finnhubFetch<FinnhubEpsEstimateResponse>(`/stock/eps-estimate?symbol=${ticker}&freq=quarterly`);
+  const data = await finnhubFetch<FinnhubEpsEstimateResponse>(
+    `/stock/eps-estimate?symbol=${ticker}&freq=quarterly`
+  );
 
-  // Degrade gracefully if unavailable or insufficient data
-  if (!data || !data.data || data.data.length < 2) {
+  if (!data?.data || data.data.length < 2) {
     const result: EstimateRevisions = { available: false };
     setCache(cacheKey, result);
     return result;
   }
 
-  // Sort by period ascending (oldest first)
   const sorted = [...data.data].sort((a, b) => a.period.localeCompare(b.period));
-
-  // Compare the two most-recent forward estimates
   const prev = sorted[sorted.length - 2];
   const curr = sorted[sorted.length - 1];
 
@@ -154,4 +217,11 @@ export async function fetchEstimateRevisions(ticker: string): Promise<EstimateRe
   const result: EstimateRevisions = { available: true, direction };
   setCache(cacheKey, result);
   return result;
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+
+function num(v: number | null | undefined): number | null {
+  if (v === null || v === undefined || !isFinite(v)) return null;
+  return v;
 }

@@ -1,6 +1,10 @@
 /**
  * Pure scoring functions for the valuation + fundamentals layer.
  * No I/O, no side effects. All thresholds live in sector-medians.ts.
+ *
+ * Data source: Finnhub /stock/metric + /stock/profile2 (no daily cap).
+ * Cheapness: P/E and P/S vs sector medians.
+ * Fundamentals: revenue growth YoY + EPS estimate revisions.
  */
 
 import {
@@ -31,10 +35,7 @@ export interface MultipleResult {
 export interface CheapnessInput {
   sector: string | null;
   pe: number | null;
-  evEbitda: number | null;
-  pFcf: number | null;
-  peg: number | null;
-  evRevenue: number | null;
+  ps: number | null;
   isUnprofitable: boolean;
 }
 
@@ -42,10 +43,7 @@ export interface CheapnessResult {
   label: CheapnessLabel;
   score: number;
   pe: MultipleResult;
-  evEbitda: MultipleResult;
-  pFcf: MultipleResult;
-  peg: MultipleResult | null;
-  evRevenue: MultipleResult | null;
+  ps: MultipleResult;
   isUnprofitable: boolean;
   missingData: string[];
 }
@@ -59,37 +57,20 @@ export interface RevisionUnavailable {
 }
 export type EstimateRevisions = RevisionSignal | RevisionUnavailable;
 
-export interface RevenueTrend {
-  direction: "growing" | "decelerating" | "shrinking" | "unknown";
-  quarters: number[]; // revenue values oldest→newest
-}
-
-export interface MarginTrend {
-  direction: "stable" | "expanding" | "compressing" | "unknown";
-  quarters: number[]; // gross margin % oldest→newest
-}
-
-export interface DebtGate {
-  triggered: boolean;
-  debtToEbitda: number | null;
-  fcfTtm: number | null;
-}
-
 export interface FundamentalsInput {
   estimateRevisions: EstimateRevisions;
-  quarterlyRevenue: number[]; // at least 4 values, oldest→newest
-  quarterlyGrossMargin: number[]; // gross margin % oldest→newest
-  debtToEbitda: number | null;
-  fcfTtm: number | null;
+  /** Revenue growth year-over-year TTM, in percent (e.g. 70.68 = +70.68%) */
+  revenueGrowthYoy: number | null;
+  /** Gross margin TTM, in percent (e.g. 74.15 = 74.15%) — informational only */
+  grossMarginTtm: number | null;
 }
 
 export interface FundamentalsResult {
   label: MomentumLabel;
   score: number;
   estimateRevisions: EstimateRevisions;
-  revenueTrend: RevenueTrend;
-  marginTrend: MarginTrend;
-  debtGate: DebtGate;
+  revenueGrowthYoy: number | null;
+  grossMarginTtm: number | null;
   missingData: string[];
 }
 
@@ -112,23 +93,12 @@ export interface VerdictResult {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function tagMultiple(
-  value: number | null,
-  median: number,
-  lowerIsBetter = true
-): MultipleTag {
+function tagMultiple(value: number | null, median: number): MultipleTag {
   if (value === null || !isFinite(value) || value <= 0) return "missing";
   const ratio = value / median;
-  if (lowerIsBetter) {
-    if (ratio < 1 - CHEAPNESS_THRESHOLDS.BELOW_BAND) return "cheap";
-    if (ratio > 1 + CHEAPNESS_THRESHOLDS.ABOVE_BAND) return "expensive";
-    return "fair";
-  } else {
-    // higher-is-better metric
-    if (ratio > 1 + CHEAPNESS_THRESHOLDS.ABOVE_BAND) return "cheap";
-    if (ratio < 1 - CHEAPNESS_THRESHOLDS.BELOW_BAND) return "expensive";
-    return "fair";
-  }
+  if (ratio < 1 - CHEAPNESS_THRESHOLDS.BELOW_BAND) return "cheap";
+  if (ratio > 1 + CHEAPNESS_THRESHOLDS.ABOVE_BAND) return "expensive";
+  return "fair";
 }
 
 function tagScore(tag: MultipleTag): number {
@@ -143,140 +113,49 @@ export function scoreCheapness(input: CheapnessInput): CheapnessResult {
   const medians = getSectorMedians(input.sector);
   const missingData: string[] = [];
   let score = 0;
+  let scoredSignals = 0;
 
   // P/E — skip for unprofitable companies
   let peResult: MultipleResult;
   if (input.isUnprofitable) {
     peResult = { value: null, sectorMedian: medians.pe, tag: "missing" };
-    // don't count PE for unprofitable
   } else {
     const peTag = tagMultiple(input.pe, medians.pe);
     peResult = { value: input.pe, sectorMedian: medians.pe, tag: peTag };
-    if (peTag === "missing") missingData.push("P/E");
-    else score += tagScore(peTag);
-  }
-
-  // EV/EBITDA — skip for unprofitable
-  let evEbitdaResult: MultipleResult;
-  if (input.isUnprofitable) {
-    evEbitdaResult = { value: null, sectorMedian: medians.evEbitda, tag: "missing" };
-  } else {
-    const evTag = tagMultiple(input.evEbitda, medians.evEbitda);
-    evEbitdaResult = { value: input.evEbitda, sectorMedian: medians.evEbitda, tag: evTag };
-    if (evTag === "missing") missingData.push("EV/EBITDA");
-    else score += tagScore(evTag);
-  }
-
-  // P/FCF — skip for unprofitable
-  let pFcfResult: MultipleResult;
-  if (input.isUnprofitable) {
-    pFcfResult = { value: null, sectorMedian: medians.pFcf, tag: "missing" };
-  } else {
-    const fcfTag = tagMultiple(input.pFcf, medians.pFcf);
-    pFcfResult = { value: input.pFcf, sectorMedian: medians.pFcf, tag: fcfTag };
-    if (fcfTag === "missing") missingData.push("P/FCF");
-    else score += tagScore(fcfTag);
-  }
-
-  // PEG overlay (lower is better)
-  let pegResult: MultipleResult | null = null;
-  if (!input.isUnprofitable && input.peg !== null && input.peg !== undefined) {
-    if (input.peg > 0 && isFinite(input.peg)) {
-      const pegTag: MultipleTag =
-        input.peg < CHEAPNESS_THRESHOLDS.PEG_CHEAP
-          ? "cheap"
-          : input.peg > CHEAPNESS_THRESHOLDS.PEG_EXPENSIVE
-          ? "expensive"
-          : "fair";
-      pegResult = { value: input.peg, sectorMedian: CHEAPNESS_THRESHOLDS.PEG_CHEAP, tag: pegTag };
-      score += tagScore(pegTag);
+    if (peTag === "missing") {
+      missingData.push("P/E");
+    } else {
+      score += tagScore(peTag);
+      scoredSignals++;
     }
-    // negative or zero PEG = skip
   }
 
-  // EV/Revenue fallback for unprofitable companies
-  let evRevenueResult: MultipleResult | null = null;
-  if (input.isUnprofitable) {
-    const evRevTag = tagMultiple(input.evRevenue, medians.evRevenue);
-    evRevenueResult = { value: input.evRevenue, sectorMedian: medians.evRevenue, tag: evRevTag };
-    if (evRevTag === "missing") missingData.push("EV/Revenue");
-    else score += tagScore(evRevTag);
+  // P/S — scored for all companies (works for unprofitable too)
+  const psTag = tagMultiple(input.ps, medians.ps);
+  const psResult: MultipleResult = { value: input.ps, sectorMedian: medians.ps, tag: psTag };
+  if (psTag === "missing") {
+    missingData.push("P/S");
+  } else {
+    score += tagScore(psTag);
+    scoredSignals++;
   }
 
-  const label: CheapnessLabel = score > CHEAPNESS_THRESHOLDS.CHEAPNESS_THRESHOLD ? "Cheap" : "Not Cheap";
+  const label: CheapnessLabel =
+    scoredSignals > 0 && score > CHEAPNESS_THRESHOLDS.CHEAPNESS_THRESHOLD
+      ? "Cheap"
+      : "Not Cheap";
 
   return {
     label,
     score,
     pe: peResult,
-    evEbitda: evEbitdaResult,
-    pFcf: pFcfResult,
-    peg: pegResult,
-    evRevenue: evRevenueResult,
+    ps: psResult,
     isUnprofitable: input.isUnprofitable,
     missingData,
   };
 }
 
 // ── Axis 2: Fundamental Momentum ─────────────────────────────────────────────
-
-function computeRevenueTrend(quarters: number[]): RevenueTrend {
-  const q = quarters.filter((v) => v > 0);
-  if (q.length < 3) return { direction: "unknown", quarters: q };
-
-  const recent = q.slice(-4); // last 4
-  // QoQ growth rates
-  const rates: number[] = [];
-  for (let i = 1; i < recent.length; i++) {
-    rates.push((recent[i] - recent[i - 1]) / recent[i - 1]);
-  }
-
-  // Shrinking: most recent quarter lower than oldest in the window
-  const overallGrowth = (recent[recent.length - 1] - recent[0]) / recent[0];
-  if (overallGrowth < -0.02) {
-    return { direction: "shrinking", quarters: recent };
-  }
-
-  // Decelerating two consecutive: growth rate declining for 2+ consecutive periods
-  let deceleratingCount = 0;
-  for (let i = 1; i < rates.length; i++) {
-    if (rates[i] < rates[i - 1]) deceleratingCount++;
-    else deceleratingCount = 0;
-    if (deceleratingCount >= 2) {
-      return { direction: "decelerating", quarters: recent };
-    }
-  }
-
-  return { direction: "growing", quarters: recent };
-}
-
-function computeMarginTrend(margins: number[]): MarginTrend {
-  const m = margins.filter((v) => isFinite(v));
-  if (m.length < 3) return { direction: "unknown", quarters: m };
-
-  const recent = m.slice(-4);
-
-  // Compressing two consecutive: margin declining for 2 consecutive periods
-  let compressingCount = 0;
-  for (let i = 1; i < recent.length; i++) {
-    if (recent[i] < recent[i - 1] - 0.005) {
-      // 0.5% tolerance
-      compressingCount++;
-    } else {
-      compressingCount = 0;
-    }
-    if (compressingCount >= 2) {
-      return { direction: "compressing", quarters: recent };
-    }
-  }
-
-  // Expanding: latest margin > earliest by >1%
-  if (recent[recent.length - 1] > recent[0] + 0.01) {
-    return { direction: "expanding", quarters: recent };
-  }
-
-  return { direction: "stable", quarters: recent };
-}
 
 function revisionSignal(rev: EstimateRevisions): number {
   if (!rev.available) return 0;
@@ -285,81 +164,45 @@ function revisionSignal(rev: EstimateRevisions): number {
   return 0;
 }
 
-export function scoreFundamentals(input: FundamentalsInput): FundamentalsResult {
+export function scoreFundamentals(input: FundamentalsInput): FundamentalsResult & { _noSignals?: boolean } {
   const missingData: string[] = [];
-
-  // Balance-sheet gate: debt/EBITDA > 3 AND negative FCF
-  const debtGate: DebtGate = {
-    triggered: false,
-    debtToEbitda: input.debtToEbitda,
-    fcfTtm: input.fcfTtm,
-  };
-  const highDebt =
-    input.debtToEbitda !== null &&
-    isFinite(input.debtToEbitda) &&
-    input.debtToEbitda > FUNDAMENTALS_THRESHOLDS.DEBT_EBITDA_GATE;
-  const negativeFcf =
-    input.fcfTtm !== null &&
-    input.fcfTtm < FUNDAMENTALS_THRESHOLDS.FCF_NEGATIVE;
-  if (highDebt && negativeFcf) {
-    debtGate.triggered = true;
-  }
-
-  const revenueTrend = computeRevenueTrend(input.quarterlyRevenue);
-  const marginTrend = computeMarginTrend(input.quarterlyGrossMargin);
-
-  if (revenueTrend.direction === "unknown") missingData.push("Revenue history");
-  if (marginTrend.direction === "unknown") missingData.push("Margin history");
-  if (!input.estimateRevisions.available) missingData.push("EPS estimate revisions");
-
-  // Automatic gate overrides everything
-  if (debtGate.triggered) {
-    return {
-      label: "Deteriorating",
-      score: -10,
-      estimateRevisions: input.estimateRevisions,
-      revenueTrend,
-      marginTrend,
-      debtGate,
-      missingData,
-    };
-  }
-
-  // Weighted sum
   let score = 0;
   let usableSignals = 0;
 
+  // EPS estimate revisions (weight 2x)
   if (input.estimateRevisions.available) {
     score += revisionSignal(input.estimateRevisions);
     usableSignals++;
+  } else {
+    missingData.push("EPS estimate revisions");
   }
 
-  if (revenueTrend.direction !== "unknown") {
-    if (revenueTrend.direction === "growing") score += 1;
-    else if (revenueTrend.direction === "shrinking" || revenueTrend.direction === "decelerating") score -= 1;
+  // Revenue growth YoY (weight 1x)
+  if (input.revenueGrowthYoy !== null) {
+    if (input.revenueGrowthYoy > FUNDAMENTALS_THRESHOLDS.REVENUE_GROWTH_POSITIVE) {
+      score += 1;
+    } else if (input.revenueGrowthYoy < FUNDAMENTALS_THRESHOLDS.REVENUE_GROWTH_NEGATIVE) {
+      score -= 1;
+    }
     usableSignals++;
-  }
-
-  if (marginTrend.direction !== "unknown") {
-    if (marginTrend.direction === "stable" || marginTrend.direction === "expanding") score += 1;
-    else if (marginTrend.direction === "compressing") score -= 1;
-    usableSignals++;
+  } else {
+    missingData.push("Revenue growth");
   }
 
   const label: MomentumLabel =
-    score > FUNDAMENTALS_THRESHOLDS.MOMENTUM_THRESHOLD ? "Stable/Improving" : "Deteriorating";
+    score > FUNDAMENTALS_THRESHOLDS.MOMENTUM_THRESHOLD
+      ? "Stable/Improving"
+      : "Deteriorating";
 
   return {
     label,
     score,
     estimateRevisions: input.estimateRevisions,
-    revenueTrend,
-    marginTrend,
-    debtGate,
+    revenueGrowthYoy: input.revenueGrowthYoy,
+    grossMarginTtm: input.grossMarginTtm,
     missingData,
-    // attach usable signal count for caller to use for unverified check
     ...(usableSignals === 0 ? { _noSignals: true } : {}),
-  } as FundamentalsResult & { _noSignals?: boolean };
+  };
 }
 
 // ── Verdict mapping ───────────────────────────────────────────────────────────
@@ -368,7 +211,7 @@ export function computeVerdict(
   cheapness: CheapnessResult,
   fundamentals: FundamentalsResult & { _noSignals?: boolean }
 ): VerdictLabel | null {
-  const noSignals = (fundamentals as FundamentalsResult & { _noSignals?: boolean })._noSignals;
+  const noSignals = fundamentals._noSignals;
 
   if (noSignals) {
     return cheapness.label === "Cheap" ? "Cheap — Unverified" : "Not Cheap — Unverified";
@@ -382,10 +225,6 @@ export function computeVerdict(
 
 // ── Explanation generation ────────────────────────────────────────────────────
 
-function pct(val: number): string {
-  return `${Math.abs(Math.round(val * 100))}%`;
-}
-
 export function generateExplanation(
   ticker: string,
   cheapness: CheapnessResult,
@@ -395,44 +234,62 @@ export function generateExplanation(
   const sentences: string[] = [];
 
   // Sentence 1: most decisive cheapness signal
-  const cheapSignals = [
-    cheapness.pe.tag === "cheap" ? `P/E is ${pct(1 - cheapness.pe.value! / cheapness.pe.sectorMedian)} below sector median` : null,
-    cheapness.evEbitda.tag === "cheap" ? `EV/EBITDA is ${pct(1 - cheapness.evEbitda.value! / cheapness.evEbitda.sectorMedian)} below sector median` : null,
-    cheapness.pFcf.tag === "cheap" ? `P/FCF is ${pct(1 - cheapness.pFcf.value! / cheapness.pFcf.sectorMedian)} below sector median` : null,
-    cheapness.evRevenue?.tag === "cheap" ? `EV/Revenue is ${pct(1 - cheapness.evRevenue.value! / cheapness.evRevenue.sectorMedian)} below sector median` : null,
-  ].filter(Boolean);
+  const pePct = (val: number, median: number) =>
+    `${Math.abs(Math.round(Math.abs(val / median - 1) * 100))}%`;
 
-  const expensiveSignals = [
-    cheapness.pe.tag === "expensive" ? `P/E trades ${pct(cheapness.pe.value! / cheapness.pe.sectorMedian - 1)} above sector median` : null,
-    cheapness.evEbitda.tag === "expensive" ? `EV/EBITDA trades ${pct(cheapness.evEbitda.value! / cheapness.evEbitda.sectorMedian - 1)} above sector median` : null,
-  ].filter(Boolean);
-
-  if (cheapSignals.length > 0) {
-    sentences.push(`${ticker} looks cheap: ${cheapSignals[0]}.`);
-  } else if (expensiveSignals.length > 0) {
-    sentences.push(`${ticker} still trades at a premium: ${expensiveSignals[0]}.`);
+  if (cheapness.pe.tag === "cheap") {
+    sentences.push(
+      `${ticker} looks cheap: P/E of ${cheapness.pe.value!.toFixed(1)}× is ${pePct(cheapness.pe.value!, cheapness.pe.sectorMedian)} below sector median.`
+    );
+  } else if (cheapness.ps.tag === "cheap") {
+    sentences.push(
+      `${ticker} looks cheap on P/S: ${cheapness.ps.value!.toFixed(1)}× vs sector median ${cheapness.ps.sectorMedian}×.`
+    );
+  } else if (cheapness.pe.tag === "expensive") {
+    sentences.push(
+      `${ticker} trades at a premium: P/E of ${cheapness.pe.value!.toFixed(1)}× is ${pePct(cheapness.pe.value!, cheapness.pe.sectorMedian)} above sector median.`
+    );
+  } else if (cheapness.ps.tag === "expensive") {
+    sentences.push(
+      `${ticker} trades at a revenue premium: P/S of ${cheapness.ps.value!.toFixed(1)}× is ${pePct(cheapness.ps.value!, cheapness.ps.sectorMedian)} above sector median.`
+    );
   } else if (cheapness.isUnprofitable) {
-    sentences.push(`${ticker} is unprofitable; valuation scored on EV/Revenue vs sector median.`);
+    sentences.push(`${ticker} is unprofitable; valuation scored on P/S vs sector median.`);
   } else {
     sentences.push(`${ticker} is trading near sector median multiples.`);
   }
 
-  // Sentence 2: decisive fundamentals signal or interpretation
-  if (fundamentals.debtGate.triggered) {
-    const d = fundamentals.debtGate.debtToEbitda?.toFixed(1) ?? "high";
-    sentences.push(`However, debt/EBITDA of ${d}× combined with negative free cash flow triggers the balance-sheet gate — the cheapness may reflect financial stress, not opportunity.`);
-  } else if (!fundamentals.estimateRevisions.available && fundamentals.revenueTrend.direction === "shrinking") {
-    sentences.push(`Revenue is contracting and estimate revision data is unavailable; the fundamental picture is uncertain.`);
-  } else if (fundamentals.estimateRevisions.available && (fundamentals.estimateRevisions as RevisionSignal).direction === "down") {
-    sentences.push(`Analyst EPS estimates have been cut recently, suggesting the decline reflects deteriorating expectations rather than overreaction.`);
-  } else if (fundamentals.marginTrend.direction === "compressing" && fundamentals.revenueTrend.direction === "shrinking") {
-    sentences.push(`Both revenue and gross margins are deteriorating — cheapness appears to be driven by fundamental weakness, not overreaction.`);
+  // Sentence 2: fundamental momentum signal
+  const rev = fundamentals.revenueGrowthYoy;
+  const epsDir =
+    fundamentals.estimateRevisions.available
+      ? (fundamentals.estimateRevisions as RevisionSignal).direction
+      : null;
+
+  if (epsDir === "down") {
+    sentences.push(
+      `Analyst EPS estimates have been cut recently, suggesting the drop reflects deteriorating expectations rather than overreaction.`
+    );
+  } else if (rev !== null && rev < FUNDAMENTALS_THRESHOLDS.REVENUE_GROWTH_NEGATIVE) {
+    sentences.push(
+      `Revenue contracted ${Math.abs(rev).toFixed(1)}% YoY — the drop may reflect genuine fundamental weakness.`
+    );
   } else if (verdict === "Potential Bargain") {
-    sentences.push(`Revenue and margins are holding up and there is no balance-sheet stress, suggesting the drop may be an overreaction.`);
+    sentences.push(
+      `Revenue is growing and estimates are stable, suggesting the price drop may be an overreaction worth watching.`
+    );
   } else if (verdict === "Repricing") {
-    sentences.push(`Fundamentals are stable but the stock has not yet de-rated enough to offer a clear margin of safety at current multiples.`);
+    sentences.push(
+      `Fundamentals are holding up, but the multiple hasn't compressed enough to offer a clear margin of safety yet.`
+    );
+  } else if (epsDir === "up") {
+    sentences.push(
+      `EPS estimates have been revised upward recently, which is a positive signal despite the premium valuation.`
+    );
   } else {
-    sentences.push(`Fundamental signals are mixed; treat this as a watchlist candidate pending more data.`);
+    sentences.push(
+      `Fundamental signals are mixed; treat this as a watchlist candidate pending more data.`
+    );
   }
 
   return sentences.join(" ");

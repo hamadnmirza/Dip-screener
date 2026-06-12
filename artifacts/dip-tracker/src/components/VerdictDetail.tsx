@@ -9,36 +9,6 @@ import type {
 import { Skeleton } from "@/components/ui/skeleton";
 import { VerdictBadge } from "./VerdictBadge";
 
-// ── Sparkline ─────────────────────────────────────────────────────────────────
-
-function Sparkline({ values }: { values: number[] }) {
-  const v = values.filter((x) => x > 0);
-  if (v.length < 2) return <span className="text-muted-foreground/50 text-xs">—</span>;
-  const min = Math.min(...v);
-  const max = Math.max(...v);
-  const range = max - min || 1;
-  const W = 52, H = 18;
-  const pts = v
-    .map((val, i) => {
-      const x = (i / (v.length - 1)) * W;
-      const y = H - ((val - min) / range) * (H - 2) - 1;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const trend = v[v.length - 1] >= v[0];
-  return (
-    <svg width={W} height={H} className="inline-block align-middle">
-      <polyline
-        points={pts}
-        fill="none"
-        stroke={trend ? "rgb(52 211 153)" : "rgb(248 113 113)"}
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 // ── Multiple row ──────────────────────────────────────────────────────────────
 
 const TAG_STYLES: Record<string, string> = {
@@ -58,23 +28,21 @@ const TAG_LABELS: Record<string, string> = {
 function MultipleRow({
   label,
   result,
-  medianLabel,
 }: {
   label: string;
   result: MultipleResult;
-  medianLabel?: string;
 }) {
   const tagStyle = TAG_STYLES[result.tag] ?? TAG_STYLES.missing;
   const tagLabel = TAG_LABELS[result.tag] ?? "N/A";
 
   return (
     <div className="flex items-center justify-between gap-2 py-0.5">
-      <span className="text-muted-foreground text-xs w-24 shrink-0">{label}</span>
+      <span className="text-muted-foreground text-xs w-20 shrink-0">{label}</span>
       <span className="font-mono text-xs text-foreground">
-        {result.value != null ? result.value.toFixed(1) : "—"}
+        {result.value != null ? `${result.value.toFixed(1)}×` : "—"}
       </span>
       <span className="text-muted-foreground/50 text-xs">
-        vs {result.sectorMedian.toFixed(1)}{medianLabel ? ` ${medianLabel}` : ""}
+        vs {result.sectorMedian.toFixed(1)}×
       </span>
       <span className={`text-xs font-semibold ${tagStyle}`}>{tagLabel}</span>
     </div>
@@ -105,39 +73,25 @@ function CheapnessSection({ data }: { data: CheapnessResult }) {
       </div>
       <div className="space-y-0.5">
         {!data.isUnprofitable && (
-          <>
-            <MultipleRow label="P/E" result={data.pe} medianLabel="median" />
-            <MultipleRow label="EV/EBITDA" result={data.evEbitda} medianLabel="median" />
-            <MultipleRow label="P/FCF" result={data.pFcf} medianLabel="median" />
-          </>
+          <MultipleRow label="P/E" result={data.pe} />
         )}
-        {data.peg && (
-          <MultipleRow label="PEG" result={data.peg} medianLabel="threshold" />
-        )}
-        {data.isUnprofitable && data.evRevenue && (
-          <MultipleRow label="EV/Revenue" result={data.evRevenue} medianLabel="median" />
-        )}
+        <MultipleRow label="P/S" result={data.ps} />
       </div>
+      <p className="text-[10px] text-muted-foreground/40 mt-2">
+        Sector medians from Finnhub industry classification
+      </p>
     </div>
   );
 }
 
 // ── Fundamentals section ──────────────────────────────────────────────────────
 
-function DirectionArrow({ positive }: { positive: boolean }) {
-  return positive ? (
-    <span className="text-emerald-400 font-bold">↑</span>
-  ) : (
-    <span className="text-red-400 font-bold">↓</span>
-  );
-}
-
 function RevisionRow({ revisions }: { revisions: EstimateRevisions }) {
   if (!revisions.available) {
     return (
       <div className="flex items-center gap-2 py-0.5">
-        <span className="text-muted-foreground text-xs w-28 shrink-0">Est. Revisions</span>
-        <span className="text-muted-foreground/50 text-xs italic">unavailable on free tier</span>
+        <span className="text-muted-foreground text-xs w-32 shrink-0">EPS Revisions</span>
+        <span className="text-muted-foreground/50 text-xs italic">unavailable</span>
       </div>
     );
   }
@@ -146,13 +100,12 @@ function RevisionRow({ revisions }: { revisions: EstimateRevisions }) {
   const neutral = dir === "flat";
   return (
     <div className="flex items-center gap-2 py-0.5">
-      <span className="text-muted-foreground text-xs w-28 shrink-0">Est. Revisions</span>
+      <span className="text-muted-foreground text-xs w-32 shrink-0">EPS Revisions</span>
       {neutral ? (
         <span className="text-muted-foreground text-xs">→ Flat</span>
       ) : (
-        <span className={`text-xs font-semibold flex items-center gap-1 ${positive ? "text-emerald-400" : "text-red-400"}`}>
-          <DirectionArrow positive={positive} />
-          {positive ? "Rising" : "Falling"}
+        <span className={`text-xs font-semibold ${positive ? "text-emerald-400" : "text-red-400"}`}>
+          {positive ? "↑ Rising" : "↓ Falling"}
         </span>
       )}
     </div>
@@ -160,9 +113,11 @@ function RevisionRow({ revisions }: { revisions: EstimateRevisions }) {
 }
 
 function FundamentalsSection({ data }: { data: FundamentalsResult }) {
-  const revPos = data.revenueTrend.direction === "growing";
-  const revNeg = data.revenueTrend.direction === "shrinking" || data.revenueTrend.direction === "decelerating";
-  const marPos = data.marginTrend.direction === "stable" || data.marginTrend.direction === "expanding";
+  const revGrowth = data.revenueGrowthYoy;
+  const grossMargin = data.grossMarginTtm;
+
+  const growthPositive = revGrowth !== null && revGrowth > 5;
+  const growthNegative = revGrowth !== null && revGrowth < -5;
 
   return (
     <div>
@@ -182,34 +137,25 @@ function FundamentalsSection({ data }: { data: FundamentalsResult }) {
         <RevisionRow revisions={data.estimateRevisions} />
 
         <div className="flex items-center gap-2 py-0.5">
-          <span className="text-muted-foreground text-xs w-28 shrink-0">Revenue Trend</span>
-          <Sparkline values={data.revenueTrend.quarters} />
-          <span className={`text-xs font-semibold ml-1 ${revPos ? "text-emerald-400" : revNeg ? "text-red-400" : "text-muted-foreground"}`}>
-            {data.revenueTrend.direction === "unknown" ? "Insufficient data" : data.revenueTrend.direction.charAt(0).toUpperCase() + data.revenueTrend.direction.slice(1)}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 py-0.5">
-          <span className="text-muted-foreground text-xs w-28 shrink-0">Gross Margin</span>
-          <Sparkline values={data.marginTrend.quarters} />
-          <span className={`text-xs font-semibold ml-1 flex items-center gap-1 ${marPos ? "text-emerald-400" : "text-red-400"}`}>
-            {data.marginTrend.direction !== "unknown" && (
-              <DirectionArrow positive={marPos} />
-            )}
-            {data.marginTrend.direction === "unknown" ? "Insufficient data" : data.marginTrend.direction.charAt(0).toUpperCase() + data.marginTrend.direction.slice(1)}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 py-0.5">
-          <span className="text-muted-foreground text-xs w-28 shrink-0">Debt Gate</span>
-          {data.debtGate.triggered ? (
-            <span className="text-red-400 text-xs font-semibold">⚠ Triggered</span>
-          ) : (
-            <span className="text-emerald-400 text-xs">
-              {data.debtGate.debtToEbitda != null
-                ? `Debt/EBITDA ${data.debtGate.debtToEbitda.toFixed(1)}×`
-                : "Clear"}
+          <span className="text-muted-foreground text-xs w-32 shrink-0">Revenue Growth</span>
+          {revGrowth !== null ? (
+            <span className={`text-xs font-semibold ${growthPositive ? "text-emerald-400" : growthNegative ? "text-red-400" : "text-muted-foreground"}`}>
+              {growthPositive ? "↑" : growthNegative ? "↓" : "→"}{" "}
+              {revGrowth >= 0 ? "+" : ""}{revGrowth.toFixed(1)}% YoY
             </span>
+          ) : (
+            <span className="text-muted-foreground/50 text-xs italic">unavailable</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 py-0.5">
+          <span className="text-muted-foreground text-xs w-32 shrink-0">Gross Margin</span>
+          {grossMargin !== null ? (
+            <span className={`text-xs font-mono ${grossMargin > 30 ? "text-emerald-400" : "text-muted-foreground"}`}>
+              {grossMargin.toFixed(1)}%
+            </span>
+          ) : (
+            <span className="text-muted-foreground/50 text-xs italic">unavailable</span>
           )}
         </div>
       </div>
@@ -276,7 +222,7 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
         {[0, 1, 2].map((i) => (
           <div key={i} className="space-y-2">
             <Skeleton className="h-4 w-24 bg-muted/30" />
-            {[...Array(4)].map((_, j) => (
+            {[...Array(3)].map((_, j) => (
               <Skeleton key={j} className="h-3 w-full bg-muted/20" />
             ))}
           </div>
@@ -288,27 +234,24 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
   if (!data) {
     return (
       <div className="p-4 text-sm text-muted-foreground/50 italic">
-        Fundamental data unavailable for {ticker}. Check that FMP_KEY and FINNHUB_KEY are configured.
+        Fundamental data unavailable for {ticker}. This ticker may not be covered by Finnhub's free tier.
       </div>
     );
   }
 
   return (
     <div className="p-4 space-y-4">
-      {/* Explanation */}
       <div className="flex items-start gap-3">
         <VerdictBadge verdict={data.verdict ?? null} size="md" />
         <p className="text-sm text-muted-foreground leading-relaxed">{data.explanation}</p>
       </div>
 
-      {/* Three sections */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 pt-2 border-t border-border/50">
         <CheapnessSection data={data.cheapness} />
         <FundamentalsSection data={data.fundamentals} />
         <AnalystsSection analysts={data.analysts} />
       </div>
 
-      {/* Missing data note */}
       {data.missingData.length > 0 && (
         <p className="text-[10px] text-muted-foreground/40 italic pt-1 border-t border-border/30">
           Data unavailable: {data.missingData.join(", ")}

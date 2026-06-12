@@ -13,11 +13,8 @@ export interface CheapnessResult {
   /** Raw cheapness score (positive = cheap) */
   score: number;
   pe: MultipleResult;
-  evEbitda: MultipleResult;
-  pFcf: MultipleResult;
-  peg?: MultipleResult | null;
-  /** Only present for unprofitable companies */
-  evRevenue?: MultipleResult | null;
+  /** Price-to-Sales vs sector median */
+  ps: MultipleResult;
   isUnprofitable: boolean;
   missingData: string[];
 }

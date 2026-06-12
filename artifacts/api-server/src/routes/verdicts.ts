@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
-import { fetchFmpValuation, fetchFmpQuarterly } from "../lib/fmp";
-import { fetchFinnhubRecommendations, fetchEstimateRevisions } from "../lib/finnhub";
+import { fetchFinnhubValuation, fetchFinnhubRecommendations, fetchEstimateRevisions } from "../lib/finnhub";
 import {
   scoreCheapness,
   scoreFundamentals,
@@ -33,7 +32,6 @@ router.get("/verdicts", async (req, res) => {
     return;
   }
 
-  // Fetch all tickers concurrently — errors per ticker are handled individually
   const entries = await Promise.all(tickers.map((ticker) => computeTickerVerdict(ticker)));
 
   const verdicts: Record<string, VerdictResult | null> = {};
@@ -46,9 +44,8 @@ router.get("/verdicts", async (req, res) => {
 
 async function computeTickerVerdict(ticker: string): Promise<VerdictResult | null> {
   try {
-    const [valuation, quarterly, analystData, revisions] = await Promise.all([
-      fetchFmpValuation(ticker),
-      fetchFmpQuarterly(ticker),
+    const [valuation, analystData, revisions] = await Promise.all([
+      fetchFinnhubValuation(ticker),
       fetchFinnhubRecommendations(ticker),
       fetchEstimateRevisions(ticker),
     ]);
@@ -58,19 +55,14 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
     const cheapness = scoreCheapness({
       sector: valuation.sector,
       pe: valuation.pe,
-      evEbitda: valuation.evEbitda,
-      pFcf: valuation.pFcf,
-      peg: valuation.peg,
-      evRevenue: valuation.evRevenue,
+      ps: valuation.ps,
       isUnprofitable: valuation.isUnprofitable,
     });
 
     const fundamentals = scoreFundamentals({
       estimateRevisions: revisions,
-      quarterlyRevenue: quarterly?.revenue ?? [],
-      quarterlyGrossMargin: quarterly?.grossMargin ?? [],
-      debtToEbitda: valuation.debtToEbitda,
-      fcfTtm: valuation.fcfTtm,
+      revenueGrowthYoy: valuation.revenueGrowthYoy,
+      grossMarginTtm: valuation.grossMarginTtm,
     }) as FundamentalsResult & { _noSignals?: boolean };
 
     const verdict = computeVerdict(cheapness, fundamentals);
@@ -85,7 +77,6 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
       : null;
 
     const explanation = generateExplanation(ticker, cheapness, fundamentals, verdict);
-
     const allMissing = [...cheapness.missingData, ...fundamentals.missingData];
 
     return {
@@ -98,7 +89,6 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
       missingData: allMissing,
     };
   } catch (err) {
-    // Per-ticker errors return null rather than breaking the batch
     return null;
   }
 }
