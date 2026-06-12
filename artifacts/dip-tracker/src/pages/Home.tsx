@@ -126,7 +126,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-foreground mb-3 tracking-tight">Scanner Results</h2>
           <SecuritiesTable params={listParams} />
           <p className="mt-3 text-[11px] text-muted-foreground/40 leading-relaxed">
-            Verdicts are screening signals based on financial data, not financial advice. They cannot detect non-financial risks (litigation, fraud, disruption). Click any equity row to expand its fundamental detail. Sector medians are hardcoded estimates refreshed quarterly.
+            This is not financial advice. Verdicts reflect P/E and P/S ratios relative to sector medians at the time of calculation and may not account for qualitative factors, non-financial risks, or information not captured in the metrics shown. Always do your own research before making any investment decisions.
           </p>
         </div>
 

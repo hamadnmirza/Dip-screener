@@ -124,7 +124,7 @@ export const GetVerdictsQueryParams = zod.object({
 export const GetVerdictsResponse = zod.object({
   "verdicts": zod.record(zod.string(), zod.union([zod.object({
   "ticker": zod.string(),
-  "verdict": zod.enum(['Potential Bargain', 'Falling Knife', 'Repricing', 'Avoid', 'Cheap — Unverified', 'Not Cheap — Unverified', 'null']).nullish(),
+  "verdict": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish(),
   "cheapness": zod.object({
   "label": zod.enum(['Cheap', 'Not Cheap']),
   "score": zod.number().describe('Raw cheapness score (positive = cheap)'),

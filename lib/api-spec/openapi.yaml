@@ -452,12 +452,9 @@ components:
         verdict:
           type: ["string", "null"]
           enum:
-            - Potential Bargain
-            - Falling Knife
-            - Repricing
-            - Avoid
-            - "Cheap \u2014 Unverified"
-            - "Not Cheap \u2014 Unverified"
+            - Undervalued
+            - At value
+            - Overvalued
             - "null"
         cheapness:
           $ref: "#/components/schemas/CheapnessResult"

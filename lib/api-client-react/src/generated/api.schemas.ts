@@ -244,12 +244,9 @@ export type TickerVerdictVerdict = typeof TickerVerdictVerdict[keyof typeof Tick
 
 
 export const TickerVerdictVerdict = {
-  Potential_Bargain: 'Potential Bargain',
-  Falling_Knife: 'Falling Knife',
-  Repricing: 'Repricing',
-  Avoid: 'Avoid',
-  'Cheap_—_Unverified': 'Cheap — Unverified',
-  'Not_Cheap_—_Unverified': 'Not Cheap — Unverified',
+  Undervalued: 'Undervalued',
+  At_value: 'At value',
+  Overvalued: 'Overvalued',
   null: 'null',
 } as const;
 

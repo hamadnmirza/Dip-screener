@@ -19,12 +19,9 @@ export type MultipleTag = "cheap" | "fair" | "expensive" | "missing";
 export type CheapnessLabel = "Cheap" | "Not Cheap";
 export type MomentumLabel = "Stable/Improving" | "Deteriorating";
 export type VerdictLabel =
-  | "Potential Bargain"
-  | "Falling Knife"
-  | "Repricing"
-  | "Avoid"
-  | "Cheap — Unverified"
-  | "Not Cheap — Unverified";
+  | "Undervalued"
+  | "At value"
+  | "Overvalued";
 
 export interface MultipleResult {
   value: number | null;
@@ -209,18 +206,11 @@ export function scoreFundamentals(input: FundamentalsInput): FundamentalsResult 
 
 export function computeVerdict(
   cheapness: CheapnessResult,
-  fundamentals: FundamentalsResult & { _noSignals?: boolean }
+  _fundamentals: FundamentalsResult & { _noSignals?: boolean }
 ): VerdictLabel | null {
-  const noSignals = fundamentals._noSignals;
-
-  if (noSignals) {
-    return cheapness.label === "Cheap" ? "Cheap — Unverified" : "Not Cheap — Unverified";
-  }
-
-  if (cheapness.label === "Cheap" && fundamentals.label === "Stable/Improving") return "Potential Bargain";
-  if (cheapness.label === "Cheap" && fundamentals.label === "Deteriorating") return "Falling Knife";
-  if (cheapness.label === "Not Cheap" && fundamentals.label === "Stable/Improving") return "Repricing";
-  return "Avoid";
+  if (cheapness.score > 0) return "Undervalued";
+  if (cheapness.score === 0) return "At value";
+  return "Overvalued";
 }
 
 // ── Explanation generation ────────────────────────────────────────────────────
@@ -231,65 +221,52 @@ export function generateExplanation(
   fundamentals: FundamentalsResult,
   verdict: VerdictLabel | null
 ): string {
-  const sentences: string[] = [];
-
-  // Sentence 1: most decisive cheapness signal
   const pePct = (val: number, median: number) =>
     `${Math.abs(Math.round(Math.abs(val / median - 1) * 100))}%`;
 
+  const sentences: string[] = [];
+
+  // Sentence 1: primary valuation signal
   if (cheapness.pe.tag === "cheap") {
     sentences.push(
-      `${ticker} looks cheap: P/E of ${cheapness.pe.value!.toFixed(1)}× is ${pePct(cheapness.pe.value!, cheapness.pe.sectorMedian)} below sector median.`
+      `${ticker}'s P/E of ${cheapness.pe.value!.toFixed(1)}× is ${pePct(cheapness.pe.value!, cheapness.pe.sectorMedian)} below the sector median of ${cheapness.pe.sectorMedian}×.`
     );
   } else if (cheapness.ps.tag === "cheap") {
     sentences.push(
-      `${ticker} looks cheap on P/S: ${cheapness.ps.value!.toFixed(1)}× vs sector median ${cheapness.ps.sectorMedian}×.`
+      `${ticker}'s P/S of ${cheapness.ps.value!.toFixed(1)}× is ${pePct(cheapness.ps.value!, cheapness.ps.sectorMedian)} below the sector median of ${cheapness.ps.sectorMedian}×.`
     );
   } else if (cheapness.pe.tag === "expensive") {
     sentences.push(
-      `${ticker} trades at a premium: P/E of ${cheapness.pe.value!.toFixed(1)}× is ${pePct(cheapness.pe.value!, cheapness.pe.sectorMedian)} above sector median.`
+      `${ticker}'s P/E of ${cheapness.pe.value!.toFixed(1)}× is ${pePct(cheapness.pe.value!, cheapness.pe.sectorMedian)} above the sector median of ${cheapness.pe.sectorMedian}×.`
     );
   } else if (cheapness.ps.tag === "expensive") {
     sentences.push(
-      `${ticker} trades at a revenue premium: P/S of ${cheapness.ps.value!.toFixed(1)}× is ${pePct(cheapness.ps.value!, cheapness.ps.sectorMedian)} above sector median.`
+      `${ticker}'s P/S of ${cheapness.ps.value!.toFixed(1)}× is ${pePct(cheapness.ps.value!, cheapness.ps.sectorMedian)} above the sector median of ${cheapness.ps.sectorMedian}×.`
     );
   } else if (cheapness.isUnprofitable) {
-    sentences.push(`${ticker} is unprofitable; valuation scored on P/S vs sector median.`);
+    sentences.push(`${ticker} is unprofitable; scored on P/S vs sector median.`);
   } else {
-    sentences.push(`${ticker} is trading near sector median multiples.`);
+    sentences.push(`${ticker} is trading close to sector median multiples.`);
   }
 
-  // Sentence 2: fundamental momentum signal
+  // Sentence 2: supporting context from fundamentals
   const rev = fundamentals.revenueGrowthYoy;
-  const epsDir =
-    fundamentals.estimateRevisions.available
-      ? (fundamentals.estimateRevisions as RevisionSignal).direction
-      : null;
+  const epsDir = fundamentals.estimateRevisions.available
+    ? (fundamentals.estimateRevisions as RevisionSignal).direction
+    : null;
 
-  if (epsDir === "down") {
-    sentences.push(
-      `Analyst EPS estimates have been cut recently, suggesting the drop reflects deteriorating expectations rather than overreaction.`
-    );
+  if (verdict === "Undervalued" && rev !== null && rev > FUNDAMENTALS_THRESHOLDS.REVENUE_GROWTH_POSITIVE) {
+    sentences.push(`Revenue is also growing ${rev.toFixed(1)}% YoY, suggesting the drop may be an overreaction.`);
+  } else if (verdict === "Undervalued") {
+    sentences.push(`The price drop has pushed it below typical sector multiples.`);
+  } else if (epsDir === "down") {
+    sentences.push(`EPS estimates have been revised down recently, which may explain the premium compression.`);
   } else if (rev !== null && rev < FUNDAMENTALS_THRESHOLDS.REVENUE_GROWTH_NEGATIVE) {
-    sentences.push(
-      `Revenue contracted ${Math.abs(rev).toFixed(1)}% YoY — the drop may reflect genuine fundamental weakness.`
-    );
-  } else if (verdict === "Potential Bargain") {
-    sentences.push(
-      `Revenue is growing and estimates are stable, suggesting the price drop may be an overreaction worth watching.`
-    );
-  } else if (verdict === "Repricing") {
-    sentences.push(
-      `Fundamentals are holding up, but the multiple hasn't compressed enough to offer a clear margin of safety yet.`
-    );
+    sentences.push(`Revenue contracted ${Math.abs(rev).toFixed(1)}% YoY — the drop may reflect real fundamental pressure.`);
   } else if (epsDir === "up") {
-    sentences.push(
-      `EPS estimates have been revised upward recently, which is a positive signal despite the premium valuation.`
-    );
+    sentences.push(`EPS estimates have been revised up recently, supporting the current premium.`);
   } else {
-    sentences.push(
-      `Fundamental signals are mixed; treat this as a watchlist candidate pending more data.`
-    );
+    sentences.push(`Review the metrics below before drawing conclusions.`);
   }
 
   return sentences.join(" ");

@@ -1,12 +1,9 @@
 import React from "react";
 
 export type VerdictString =
-  | "Potential Bargain"
-  | "Falling Knife"
-  | "Repricing"
-  | "Avoid"
-  | "Cheap — Unverified"
-  | "Not Cheap — Unverified"
+  | "Undervalued"
+  | "At value"
+  | "Overvalued"
   | null
   | undefined;
 
@@ -16,12 +13,9 @@ interface VerdictBadgeProps {
 }
 
 const VERDICT_STYLES: Record<string, string> = {
-  "Potential Bargain":    "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
-  "Falling Knife":        "bg-red-500/15 text-red-400 border border-red-500/30",
-  "Repricing":            "bg-slate-500/15 text-slate-400 border border-slate-500/30",
-  "Avoid":                "bg-red-900/20 text-red-600 border border-red-900/40",
-  "Cheap — Unverified":   "bg-amber-500/15 text-amber-400 border border-amber-500/30",
-  "Not Cheap — Unverified": "bg-amber-500/10 text-amber-500/70 border border-amber-500/20",
+  "Undervalued": "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
+  "At value":    "bg-sky-500/15 text-sky-400 border border-sky-500/30",
+  "Overvalued":  "bg-amber-500/15 text-amber-400 border border-amber-500/30",
 };
 
 export function VerdictBadge({ verdict, size = "sm" }: VerdictBadgeProps) {
