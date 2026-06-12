@@ -125,6 +125,7 @@ export const GetVerdictsResponse = zod.object({
   "verdicts": zod.record(zod.string(), zod.union([zod.object({
   "ticker": zod.string(),
   "verdict": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish(),
+  "verdictBase": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish(),
   "cheapness": zod.object({
   "label": zod.enum(['Cheap', 'Not Cheap']),
   "score": zod.number().describe('Raw cheapness score (positive = cheap)'),
@@ -158,6 +159,11 @@ export const GetVerdictsResponse = zod.object({
   "sell": zod.number(),
   "consensus": zod.string()
 }),zod.null()]).optional(),
+  "roic": zod.object({
+  "flag": zod.enum(['strong_positive', 'positive', 'neutral', 'negative', 'strong_negative', 'skipped', 'missing']),
+  "value": zod.number().nullish(),
+  "note": zod.string()
+}).optional(),
   "explanation": zod.string(),
   "missingData": zod.array(zod.string())
 }),zod.null()]))

@@ -8,6 +8,7 @@
 import { logger } from "./logger";
 
 const FMP_BASE = "https://financialmodelingprep.com/stable";
+const FMP_V3_BASE = "https://financialmodelingprep.com/api/v3";
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -58,6 +59,28 @@ async function fmpFetch<T>(path: string): Promise<T | null> {
     return json as T;
   } catch (err) {
     logger.warn({ path, err }, "FMP fetch failed");
+    return null;
+  }
+}
+
+// ── HTTP helper (v3 API) ──────────────────────────────────────────────────────
+
+async function fmpV3Fetch<T>(path: string): Promise<T | null> {
+  const apiKey = process.env.FMP_KEY;
+  if (!apiKey) return null;
+  const sep = path.includes("?") ? "&" : "?";
+  const url = `${FMP_V3_BASE}${path}${sep}apikey=${apiKey}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) {
+      logger.warn({ status: res.status, path }, "FMP v3 API error");
+      return null;
+    }
+    const json = await res.json();
+    if (json && typeof json === "object" && !Array.isArray(json) && "Error Message" in json) return null;
+    return json as T;
+  } catch (err) {
+    logger.warn({ path, err }, "FMP v3 fetch failed");
     return null;
   }
 }
@@ -178,6 +201,38 @@ export async function fetchFmpQuarterly(ticker: string): Promise<FmpQuarterlyDat
   if (revenue.length < 3) return null;
 
   const result: FmpQuarterlyData = { revenue, grossMargin };
+  setCache(cacheKey, result);
+  return result;
+}
+
+// ── ROIC (v3 API) ─────────────────────────────────────────────────────────────
+
+interface FmpKeyMetricsTtmV3 {
+  roicTTM?: number | null;
+}
+
+export interface FmpRoicData {
+  /** ROIC TTM as a decimal (e.g. 0.16 = 16%). null if unavailable or degenerate. */
+  roicTTM: number | null;
+}
+
+/**
+ * Fetches ROIC TTM from FMP /key-metrics-ttm (v3).
+ * Degenerate values (|roic| > 200%, e.g. from negative invested capital) → null.
+ */
+export async function fetchFmpRoic(ticker: string): Promise<FmpRoicData | null> {
+  const cacheKey = `roic:${ticker}`;
+  const cached = getCached<FmpRoicData>(cacheKey);
+  if (cached) return cached;
+
+  const data = await fmpV3Fetch<FmpKeyMetricsTtmV3[]>(`/key-metrics-ttm/${ticker}`);
+  if (!data || data.length === 0) return null;
+
+  const raw = data[0]?.roicTTM ?? null;
+  const roicTTM =
+    raw !== null && isFinite(raw) && Math.abs(raw) <= 2.0 ? raw : null;
+
+  const result: FmpRoicData = { roicTTM };
   setCache(cacheKey, result);
   return result;
 }

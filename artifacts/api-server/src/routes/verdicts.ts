@@ -1,9 +1,12 @@
 import { Router, type IRouter } from "express";
 import { fetchFinnhubValuation, fetchFinnhubRecommendations, fetchEstimateRevisions } from "../lib/finnhub";
+import { fetchFmpRoic } from "../lib/fmp";
 import {
   scoreCheapness,
   scoreFundamentals,
   computeVerdict,
+  computeRoicFlag,
+  applyRoicModifier,
   generateExplanation,
   computeAnalystConsensus,
   type VerdictResult,
@@ -44,10 +47,11 @@ router.get("/verdicts", async (req, res) => {
 
 async function computeTickerVerdict(ticker: string): Promise<VerdictResult | null> {
   try {
-    const [valuation, analystData, revisions] = await Promise.all([
+    const [valuation, analystData, revisions, fmpRoic] = await Promise.all([
       fetchFinnhubValuation(ticker),
       fetchFinnhubRecommendations(ticker),
       fetchEstimateRevisions(ticker),
+      fetchFmpRoic(ticker),
     ]);
 
     if (!valuation) return null;
@@ -65,7 +69,18 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
       grossMarginTtm: valuation.grossMarginTtm,
     }) as FundamentalsResult & { _noSignals?: boolean };
 
-    const verdict = computeVerdict(cheapness, fundamentals);
+    // Base verdict from cheapness alone
+    const verdictBase = computeVerdict(cheapness, fundamentals);
+
+    // ROIC quality modifier
+    const roic = computeRoicFlag(fmpRoic?.roicTTM ?? null, valuation.sector);
+    const roicMod = verdictBase !== null
+      ? applyRoicModifier(verdictBase, roic)
+      : { verdict: verdictBase as never, shifted: false };
+
+    const verdict = verdictBase !== null
+      ? roicMod.verdict
+      : null;
 
     const analysts = analystData
       ? {
@@ -76,19 +91,30 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
         }
       : null;
 
-    const explanation = generateExplanation(ticker, cheapness, fundamentals, verdict);
+    const explanation = generateExplanation(
+      ticker,
+      cheapness,
+      fundamentals,
+      verdict,
+      roicMod.shifted
+        ? { roic, modification: roicMod, baseVerdict: verdictBase }
+        : undefined
+    );
+
     const allMissing = [...cheapness.missingData, ...fundamentals.missingData];
 
     return {
       ticker,
       verdict,
+      verdictBase,
       cheapness,
       fundamentals,
       analysts,
+      roic,
       explanation,
       missingData: allMissing,
     };
-  } catch (err) {
+  } catch {
     return null;
   }
 }

@@ -183,3 +183,59 @@ export const FUNDAMENTALS_THRESHOLDS = {
   /** Weighted sum > 0 → "Stable/Improving" */
   MOMENTUM_THRESHOLD: 0,
 };
+
+// ── ROIC configuration ────────────────────────────────────────────────────────
+
+/**
+ * ROIC flag thresholds (decimal form, e.g. 0.08 = 8%).
+ * Capital-intensive sectors have all non-zero thresholds reduced by CAPITAL_INTENSIVE_REDUCTION.
+ */
+export const ROIC_THRESHOLDS = {
+  /** ROIC < 0 → "strong_negative" (applies to all sectors unchanged) */
+  STRONG_NEGATIVE_MAX: 0,
+  /** 0 ≤ ROIC < 0.08 → "negative" (below typical WACC) */
+  NEGATIVE_MAX: 0.08,
+  /** 0.08 ≤ ROIC ≤ 0.12 → "neutral" (roughly earning cost of capital) */
+  NEUTRAL_MAX: 0.12,
+  /** 0.12 < ROIC ≤ 0.20 → "positive" (value-creating) */
+  POSITIVE_MAX: 0.20,
+  // ROIC > 0.20 → "strong_positive" (elite, durable moat)
+  /** Reduce all thresholds by this for capital-intensive sectors (lower WACC) */
+  CAPITAL_INTENSIVE_REDUCTION: 0.03,
+};
+
+/**
+ * Broad sectors where ROIC is not meaningful (e.g. banks — invested capital measure is unreliable).
+ * Skip the modifier entirely for these.
+ */
+const ROIC_SKIP_BROAD_SECTORS = new Set(["Financials"]);
+
+/**
+ * Specific Finnhub industry strings with structurally lower WACC.
+ * Applies the CAPITAL_INTENSIVE_REDUCTION to all thresholds.
+ */
+const ROIC_CAPITAL_INTENSIVE_INDUSTRIES = new Set([
+  "Utilities—Regulated Electric",
+  "Utilities—Renewable",
+  "Utilities—Diversified",
+  "Utilities—Independent Power",
+  "Utilities",
+  "Telecom Services",
+]);
+
+/**
+ * Returns ROIC scoring config for a given Finnhub industry string.
+ * skip: true → ROIC not meaningful; skip modifier entirely.
+ * capitalIntensive: true → reduce thresholds by CAPITAL_INTENSIVE_REDUCTION.
+ */
+export function getRoicSectorConfig(finnhubIndustry: string | null | undefined): {
+  skip: boolean;
+  capitalIntensive: boolean;
+} {
+  if (!finnhubIndustry) return { skip: false, capitalIntensive: false };
+  const sector = INDUSTRY_TO_SECTOR[finnhubIndustry];
+  return {
+    skip: ROIC_SKIP_BROAD_SECTORS.has(sector ?? ""),
+    capitalIntensive: ROIC_CAPITAL_INTENSIVE_INDUSTRIES.has(finnhubIndustry),
+  };
+}

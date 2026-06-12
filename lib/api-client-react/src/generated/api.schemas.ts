@@ -237,6 +237,26 @@ export interface AnalystCounts {
   consensus: string;
 }
 
+export type RoicResultFlag = typeof RoicResultFlag[keyof typeof RoicResultFlag];
+
+
+export const RoicResultFlag = {
+  strong_positive: 'strong_positive',
+  positive: 'positive',
+  neutral: 'neutral',
+  negative: 'negative',
+  strong_negative: 'strong_negative',
+  skipped: 'skipped',
+  missing: 'missing',
+} as const;
+
+export interface RoicResult {
+  flag: RoicResultFlag;
+  /** @nullable */
+  value?: number | null;
+  note: string;
+}
+
 /**
  * @nullable
  */
@@ -250,13 +270,29 @@ export const TickerVerdictVerdict = {
   null: 'null',
 } as const;
 
+/**
+ * @nullable
+ */
+export type TickerVerdictVerdictBase = typeof TickerVerdictVerdictBase[keyof typeof TickerVerdictVerdictBase] | null;
+
+
+export const TickerVerdictVerdictBase = {
+  Undervalued: 'Undervalued',
+  At_value: 'At value',
+  Overvalued: 'Overvalued',
+  null: 'null',
+} as const;
+
 export interface TickerVerdict {
   ticker: string;
   /** @nullable */
   verdict?: TickerVerdictVerdict;
+  /** @nullable */
+  verdictBase?: TickerVerdictVerdictBase;
   cheapness: CheapnessResult;
   fundamentals: FundamentalsResult;
   analysts?: AnalystCounts | null;
+  roic?: RoicResult;
   explanation: string;
   missingData: string[];
 }

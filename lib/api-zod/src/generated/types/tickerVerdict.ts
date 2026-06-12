@@ -8,15 +8,20 @@
 import type { AnalystCounts } from './analystCounts';
 import type { CheapnessResult } from './cheapnessResult';
 import type { FundamentalsResult } from './fundamentalsResult';
+import type { RoicResult } from './roicResult';
 import type { TickerVerdictVerdict } from './tickerVerdictVerdict';
+import type { TickerVerdictVerdictBase } from './tickerVerdictVerdictBase';
 
 export interface TickerVerdict {
   ticker: string;
   /** @nullable */
   verdict?: TickerVerdictVerdict;
+  /** @nullable */
+  verdictBase?: TickerVerdictVerdictBase;
   cheapness: CheapnessResult;
   fundamentals: FundamentalsResult;
   analysts?: AnalystCounts | null;
+  roic?: RoicResult;
   explanation: string;
   missingData: string[];
 }

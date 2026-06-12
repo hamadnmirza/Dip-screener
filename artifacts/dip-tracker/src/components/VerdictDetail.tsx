@@ -5,6 +5,7 @@ import type {
   CheapnessResult,
   FundamentalsResult,
   EstimateRevisions,
+  RoicResult,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VerdictBadge } from "./VerdictBadge";
@@ -163,6 +164,73 @@ function FundamentalsSection({ data }: { data: FundamentalsResult }) {
   );
 }
 
+// ── ROIC section ──────────────────────────────────────────────────────────────
+
+const ROIC_FLAG_STYLES: Record<string, { bar: string; text: string; label: string }> = {
+  strong_positive: { bar: "bg-emerald-500",     text: "text-emerald-400",       label: "Elite" },
+  positive:        { bar: "bg-emerald-500/70",   text: "text-emerald-400/80",    label: "Value-Creating" },
+  neutral:         { bar: "bg-slate-500",        text: "text-muted-foreground",  label: "Neutral" },
+  negative:        { bar: "bg-amber-500",        text: "text-amber-400",         label: "Below WACC" },
+  strong_negative: { bar: "bg-red-500",          text: "text-red-400",           label: "Destroys Capital" },
+  skipped:         { bar: "bg-slate-700",        text: "text-muted-foreground/50", label: "N/A" },
+  missing:         { bar: "bg-slate-700",        text: "text-muted-foreground/50", label: "Unavailable" },
+};
+
+function RoicSection({ data, verdictShifted, verdictBase, verdict }: {
+  data: RoicResult;
+  verdictShifted: boolean;
+  verdictBase?: string | null;
+  verdict?: string | null;
+}) {
+  const style = ROIC_FLAG_STYLES[data.flag] ?? ROIC_FLAG_STYLES.missing;
+  const pct = data.value != null ? `${Math.round(data.value * 100)}%` : null;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Quality (ROIC)</span>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted/30 ${style.text}`}>
+          {style.label}
+        </span>
+      </div>
+
+      <div className="space-y-1.5">
+        {/* ROIC value + mini bar */}
+        <div className="flex items-center gap-2 py-0.5">
+          <span className="text-muted-foreground text-xs w-16 shrink-0">ROIC TTM</span>
+          {pct !== null ? (
+            <span className={`font-mono text-xs font-semibold ${style.text}`}>{pct}</span>
+          ) : (
+            <span className="text-muted-foreground/50 text-xs italic">—</span>
+          )}
+        </div>
+
+        {/* Colour-coded bar only when value is present */}
+        {pct !== null && data.value != null && (
+          <div className="h-1 bg-muted/30 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full ${style.bar}`}
+              style={{ width: `${Math.min(100, Math.abs(data.value!) * 100 / 0.25 * 100)}%` }}
+            />
+          </div>
+        )}
+
+        {/* One-line interpretation */}
+        <p className="text-[11px] text-muted-foreground/70 leading-relaxed pt-0.5">
+          {data.note}
+        </p>
+
+        {/* Shift indicator */}
+        {verdictShifted && verdictBase && verdict && (
+          <p className="text-[10px] text-sky-400/80 bg-sky-500/10 border border-sky-500/20 rounded px-2 py-1 leading-relaxed">
+            ROIC shifted verdict: "{verdictBase}" → "{verdict}"
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Analyst section ───────────────────────────────────────────────────────────
 
 function AnalystsSection({
@@ -218,8 +286,8 @@ interface VerdictDetailProps {
 export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
   if (loading) {
     return (
-      <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[0, 1, 2].map((i) => (
+      <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-6">
+        {[0, 1, 2, 3].map((i) => (
           <div key={i} className="space-y-2">
             <Skeleton className="h-4 w-24 bg-muted/30" />
             {[...Array(3)].map((_, j) => (
@@ -239,6 +307,8 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
     );
   }
 
+  const roicShifted = !!(data.roic && data.verdictBase && data.verdict && data.verdictBase !== data.verdict);
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-start gap-3">
@@ -246,9 +316,17 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
         <p className="text-sm text-muted-foreground leading-relaxed">{data.explanation}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 pt-2 border-t border-border/50">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-8 gap-y-4 pt-2 border-t border-border/50">
         <CheapnessSection data={data.cheapness} />
         <FundamentalsSection data={data.fundamentals} />
+        {data.roic && (
+          <RoicSection
+            data={data.roic}
+            verdictShifted={roicShifted}
+            verdictBase={data.verdictBase}
+            verdict={data.verdict}
+          />
+        )}
         <AnalystsSection analysts={data.analysts} />
       </div>
 

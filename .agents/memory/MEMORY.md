@@ -1,0 +1,2 @@
+- [ROIC scoring architecture](roic-scoring.md) — ROIC is a one-notch modifier on top of cheapness verdict; thresholds + sector config in sector-medians.ts.
+- [FMP v3 for ROIC](fmp-roic.md) — FMP stable API lacks roicTTM; must use v3 endpoint (/api/v3/key-metrics-ttm/{ticker}).

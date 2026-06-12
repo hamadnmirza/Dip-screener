@@ -1,0 +1,34 @@
+Extend my existing Dip Tracker app. Don't rebuild or restyle anything — the dashboard, filters, Top Movers, Scanner Results table, and the existing valuation/verdict logic stay as they are. We're adding ROIC as a quality modifier to the stock verdict logic (stocks only, skip crypto rows).
+Data:
+
+Fetch ROIC from Financial Modeling Prep (FMP_KEY env var) via the /key-metrics-ttm endpoint (field: roicTTM). Use the TTM figure, not last fiscal year.
+Fetch the company's sector from /profile (already fetched if cached — reuse the cache, don't duplicate calls).
+Cache per ticker for 1 hour, lazy-fetch only for visible stock rows, same as existing integrations.
+
+ROIC scoring logic (add to the scoring module as a pure function, thresholds in the config file):
+if sector == "Financial Services": skip ROIC entirely (not meaningful for banks; note this in detail view)
+elif ROIC < 0:      roic_flag = "strong_negative"
+elif ROIC < 0.08:   roic_flag = "negative"        # below typical WACC (~8-10%)
+elif ROIC <= 0.12:  roic_flag = "neutral"         # roughly earning cost of capital
+elif ROIC <= 0.20:  roic_flag = "positive"        # value-creating
+else:               roic_flag = "strong_positive" # elite, durable moat
+How it modifies the existing verdict (do NOT replace the existing cheapness logic):
+
+ROIC is a quality signal, not a cheapness signal. It acts as a one-notch modifier on the existing verdict scale (Undervalued → At Value → Overvalued):
+
+positive or strong_positive → shift the verdict one notch favourable (e.g. "At Value" becomes "Undervalued") — high-ROIC businesses justify richer multiples.
+negative or strong_negative → shift one notch unfavourable — a cheap multiple on a value-destroying business is not cheap.
+neutral → no adjustment.
+
+
+Exception: strong_negative (negative ROIC) can never produce "Undervalued" regardless of cheapness — cap at "At Value" with a warning tag.
+Special-case capital-intensive sectors (Utilities, Telecommunications): lower all ROIC thresholds by 3 percentage points before flagging, since ~6–9% ROIC is structurally normal there (their cost of capital is also lower).
+
+Detail view changes (the expanded panel when a stock row is clicked):
+
+Add ROIC to the metrics section: value, its flag (colour-coded: green positive, grey neutral, red negative), and a one-line interpretation, e.g. "ROIC 16% — earning well above its ~8–10% cost of capital; growth is creating value" or "ROIC 4% — below cost of capital; growth at this return destroys value."
+If the verdict was shifted by ROIC, say so explicitly in the plain-English explanation: e.g. "Multiples screen as fairly valued, but 22% ROIC justifies a premium — upgraded to Undervalued."
+For Financials: show "ROIC: n/a (not meaningful for financial companies)".
+
+Edge cases: missing ROIC from the API → no modifier applied, detail view notes "ROIC unavailable"; negative invested capital or other degenerate values → treat as missing, don't flag.
+Keep the ROIC thresholds, the sector adjustment, and the notch-shift rules in the config file so they can be tuned without touching logic.

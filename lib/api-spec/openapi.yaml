@@ -443,6 +443,25 @@ components:
         consensus:
           type: string
 
+    RoicResult:
+      type: object
+      required: [flag, note]
+      properties:
+        flag:
+          type: string
+          enum:
+            - strong_positive
+            - positive
+            - neutral
+            - negative
+            - strong_negative
+            - skipped
+            - missing
+        value:
+          type: ["number", "null"]
+        note:
+          type: string
+
     TickerVerdict:
       type: object
       required: [ticker, cheapness, fundamentals, explanation, missingData]
@@ -450,6 +469,13 @@ components:
         ticker:
           type: string
         verdict:
+          type: ["string", "null"]
+          enum:
+            - Undervalued
+            - At value
+            - Overvalued
+            - "null"
+        verdictBase:
           type: ["string", "null"]
           enum:
             - Undervalued
@@ -464,6 +490,8 @@ components:
           oneOf:
             - $ref: "#/components/schemas/AnalystCounts"
             - type: "null"
+        roic:
+          $ref: "#/components/schemas/RoicResult"
         explanation:
           type: string
         missingData:

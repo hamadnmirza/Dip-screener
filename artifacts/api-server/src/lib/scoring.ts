@@ -11,6 +11,8 @@ import {
   getSectorMedians,
   CHEAPNESS_THRESHOLDS,
   FUNDAMENTALS_THRESHOLDS,
+  ROIC_THRESHOLDS,
+  getRoicSectorConfig,
 } from "./sector-medians";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -78,12 +80,44 @@ export interface AnalystCounts {
   consensus: string;
 }
 
+// ── ROIC types ────────────────────────────────────────────────────────────────
+
+export type RoicFlag =
+  | "strong_positive"
+  | "positive"
+  | "neutral"
+  | "negative"
+  | "strong_negative"
+  | "skipped"
+  | "missing";
+
+export interface RoicResult {
+  flag: RoicFlag;
+  /** ROIC value as decimal (e.g. 0.16 = 16%). null for skipped/missing. */
+  value: number | null;
+  /** Human-readable one-line interpretation for the detail view. */
+  note: string;
+}
+
+export interface RoicModification {
+  /** Final verdict after applying the ROIC notch shift. */
+  verdict: VerdictLabel;
+  /** True if ROIC changed the base verdict. */
+  shifted: boolean;
+  shiftDirection?: "up" | "down";
+  /** True when strong_negative cap held the verdict at "At value". */
+  capped?: boolean;
+}
+
 export interface VerdictResult {
   ticker: string;
   verdict: VerdictLabel | null;
+  /** Verdict before ROIC modifier was applied. */
+  verdictBase: VerdictLabel | null;
   cheapness: CheapnessResult;
   fundamentals: FundamentalsResult;
   analysts: AnalystCounts | null;
+  roic: RoicResult;
   explanation: string;
   missingData: string[];
 }
@@ -202,6 +236,121 @@ export function scoreFundamentals(input: FundamentalsInput): FundamentalsResult 
   };
 }
 
+// ── ROIC scoring ──────────────────────────────────────────────────────────────
+
+/**
+ * Computes the ROIC quality flag for a ticker.
+ * All thresholds live in ROIC_THRESHOLDS in sector-medians.ts.
+ * Capital-intensive sectors (Utilities, Telecom) have lower effective thresholds.
+ */
+export function computeRoicFlag(
+  roic: number | null,
+  finnhubIndustry: string | null
+): RoicResult {
+  const { skip, capitalIntensive } = getRoicSectorConfig(finnhubIndustry);
+
+  if (skip) {
+    return {
+      flag: "skipped",
+      value: null,
+      note: "ROIC: n/a — not meaningful for financial companies.",
+    };
+  }
+
+  if (roic === null || !isFinite(roic)) {
+    return {
+      flag: "missing",
+      value: null,
+      note: "ROIC unavailable — no modifier applied.",
+    };
+  }
+
+  const reduction = capitalIntensive ? ROIC_THRESHOLDS.CAPITAL_INTENSIVE_REDUCTION : 0;
+  const pct = Math.round(roic * 100);
+  const capNote = capitalIntensive ? " (adjusted for capital-intensive sector)" : "";
+
+  if (roic < ROIC_THRESHOLDS.STRONG_NEGATIVE_MAX) {
+    return {
+      flag: "strong_negative",
+      value: roic,
+      note: `ROIC ${pct}% — negative; actively destroying capital.`,
+    };
+  }
+
+  const negMax   = ROIC_THRESHOLDS.NEGATIVE_MAX   - reduction;
+  const neutMax  = ROIC_THRESHOLDS.NEUTRAL_MAX     - reduction;
+  const posMax   = ROIC_THRESHOLDS.POSITIVE_MAX    - reduction;
+
+  if (roic < negMax) {
+    return {
+      flag: "negative",
+      value: roic,
+      note: `ROIC ${pct}% — below cost of capital (~${Math.round(negMax * 100)}%${capNote}); growth at this return destroys value.`,
+    };
+  }
+
+  if (roic <= neutMax) {
+    return {
+      flag: "neutral",
+      value: roic,
+      note: `ROIC ${pct}% — roughly earning its cost of capital; neither creating nor destroying significant value.`,
+    };
+  }
+
+  if (roic <= posMax) {
+    return {
+      flag: "positive",
+      value: roic,
+      note: `ROIC ${pct}% — above cost of capital${capNote}; growth is creating shareholder value.`,
+    };
+  }
+
+  return {
+    flag: "strong_positive",
+    value: roic,
+    note: `ROIC ${pct}% — well above cost of capital${capNote}; likely indicates a durable competitive moat.`,
+  };
+}
+
+/** Ordered scale from most- to least-favourable. */
+const VERDICT_SCALE: VerdictLabel[] = ["Undervalued", "At value", "Overvalued"];
+
+/**
+ * Applies a one-notch ROIC quality modifier to the base cheapness verdict.
+ * positive/strong_positive → shift towards "Undervalued".
+ * negative/strong_negative → shift towards "Overvalued".
+ * Exception: strong_negative can never produce "Undervalued" — capped at "At value".
+ * neutral/skipped/missing  → no change.
+ */
+export function applyRoicModifier(
+  baseVerdict: VerdictLabel,
+  roic: RoicResult
+): RoicModification {
+  const { flag } = roic;
+
+  if (flag === "neutral" || flag === "skipped" || flag === "missing") {
+    return { verdict: baseVerdict, shifted: false };
+  }
+
+  const idx = VERDICT_SCALE.indexOf(baseVerdict);
+
+  if (flag === "positive" || flag === "strong_positive") {
+    const newIdx = Math.max(0, idx - 1);
+    if (newIdx === idx) return { verdict: baseVerdict, shifted: false };
+    return { verdict: VERDICT_SCALE[newIdx]!, shifted: true, shiftDirection: "up" };
+  }
+
+  // negative or strong_negative
+  if (flag === "strong_negative" && baseVerdict === "Undervalued") {
+    // Cap: strong_negative can never produce "Undervalued"
+    return { verdict: "At value", shifted: true, shiftDirection: "down", capped: true };
+  }
+
+  const newIdx = Math.min(VERDICT_SCALE.length - 1, idx + 1);
+  if (newIdx === idx) return { verdict: baseVerdict, shifted: false };
+  return { verdict: VERDICT_SCALE[newIdx]!, shifted: true, shiftDirection: "down" };
+}
+
 // ── Verdict mapping ───────────────────────────────────────────────────────────
 
 export function computeVerdict(
@@ -219,7 +368,8 @@ export function generateExplanation(
   ticker: string,
   cheapness: CheapnessResult,
   fundamentals: FundamentalsResult,
-  verdict: VerdictLabel | null
+  verdict: VerdictLabel | null,
+  roicContext?: { roic: RoicResult; modification: RoicModification; baseVerdict: VerdictLabel | null }
 ): string {
   const pePct = (val: number, median: number) =>
     `${Math.abs(Math.round(Math.abs(val / median - 1) * 100))}%`;
@@ -267,6 +417,25 @@ export function generateExplanation(
     sentences.push(`EPS estimates have been revised up recently, supporting the current premium.`);
   } else {
     sentences.push(`Review the metrics below before drawing conclusions.`);
+  }
+
+  // Sentence 3 (optional): ROIC modifier narrative when the verdict was shifted
+  if (roicContext?.modification.shifted) {
+    const { modification, roic, baseVerdict } = roicContext;
+    const roicPct = roic.value !== null ? `${Math.round(roic.value * 100)}%` : null;
+
+    if (modification.shiftDirection === "up" && roicPct) {
+      sentences.push(
+        `${roicPct} ROIC signals a quality business — upgraded from "${baseVerdict}" to "${verdict}".`
+      );
+    } else if (modification.shiftDirection === "down" && roicPct) {
+      const capNote = modification.capped
+        ? ` (strong-negative ROIC cannot produce "Undervalued")`
+        : "";
+      sentences.push(
+        `${roicPct} ROIC below cost of capital reduces quality — downgraded from "${baseVerdict}" to "${verdict}"${capNote}.`
+      );
+    }
   }
 
   return sentences.join(" ");
