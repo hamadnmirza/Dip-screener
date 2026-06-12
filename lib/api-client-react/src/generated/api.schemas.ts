@@ -5,6 +5,17 @@
  * API specification for Dip Tracker - securities that have fallen in price
  * OpenAPI spec version: 0.1.0
  */
+export interface PriceTarget {
+  /** Median analyst price target */
+  targetMedian: number;
+  /** Highest analyst price target */
+  targetHigh: number;
+  /** Lowest analyst price target */
+  targetLow: number;
+  /** Date string when targets were last updated (YYYY-MM-DD) */
+  lastUpdated?: string | null;
+}
+
 export interface NewsArticle {
   headline: string;
   source: string;
@@ -369,6 +380,8 @@ export interface TickerVerdict {
   analysts?: AnalystCounts | null;
   roic?: RoicResult;
   de?: DeResult;
+  /** Analyst consensus price target (median, high, low). Null when no coverage. */
+  priceTarget?: PriceTarget | null;
   explanation: string;
   missingData: string[];
 }

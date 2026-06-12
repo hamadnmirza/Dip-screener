@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { fetchFinnhubValuation, fetchFinnhubRecommendations, fetchEstimateRevisions } from "../lib/finnhub";
+import { fetchPriceTarget } from "../lib/fmp";
 import {
   scoreCheapness,
   scoreFundamentals,
@@ -48,10 +49,11 @@ router.get("/verdicts", async (req, res) => {
 
 async function computeTickerVerdict(ticker: string): Promise<VerdictResult | null> {
   try {
-    const [valuation, analystData, revisions] = await Promise.all([
+    const [valuation, analystData, revisions, priceTargetData] = await Promise.all([
       fetchFinnhubValuation(ticker),
       fetchFinnhubRecommendations(ticker),
       fetchEstimateRevisions(ticker),
+      fetchPriceTarget(ticker),
     ]);
 
     if (!valuation) return null;
@@ -124,6 +126,7 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
       analysts,
       roic,
       de,
+      priceTarget: priceTargetData,
       explanation,
       missingData: allMissing,
     };

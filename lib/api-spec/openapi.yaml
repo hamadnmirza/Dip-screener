@@ -219,6 +219,24 @@ paths:
 
 components:
   schemas:
+    PriceTarget:
+      type: object
+      required: [targetMedian, targetHigh, targetLow]
+      properties:
+        targetMedian:
+          type: number
+          description: Median analyst price target
+        targetHigh:
+          type: number
+          description: Highest analyst price target
+        targetLow:
+          type: number
+          description: Lowest analyst price target
+        lastUpdated:
+          type: string
+          nullable: true
+          description: Date string when targets were last updated (YYYY-MM-DD)
+
     NewsArticle:
       type: object
       required: [headline, source, publishedAt, url]
@@ -593,6 +611,11 @@ components:
           $ref: "#/components/schemas/RoicResult"
         de:
           $ref: "#/components/schemas/DeResult"
+        priceTarget:
+          oneOf:
+            - $ref: "#/components/schemas/PriceTarget"
+            - type: "null"
+          description: Analyst consensus price target (median, high, low). Null when no coverage.
         explanation:
           type: string
         missingData:

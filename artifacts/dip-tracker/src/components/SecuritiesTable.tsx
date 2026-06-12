@@ -223,6 +223,7 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
                         ticker={security.ticker}
                         data={tickerVerdict ?? null}
                         loading={verdictsLoading}
+                        currentPrice={security.currentPrice}
                       />
                     </TableCell>
                   </TableRow>

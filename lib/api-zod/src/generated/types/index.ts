@@ -36,6 +36,7 @@ export * from './multipleResult';
 export * from './multipleTag';
 export * from './newsArticle';
 export * from './newsResponse';
+export * from './priceTarget';
 export * from './roicResult';
 export * from './roicResultFlag';
 export * from './securitiesResponse';

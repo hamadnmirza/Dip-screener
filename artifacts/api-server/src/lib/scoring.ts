@@ -154,6 +154,7 @@ export interface VerdictResult {
   analysts: AnalystCounts | null;
   roic: RoicResult;
   de: DeResult;
+  priceTarget: { targetMedian: number; targetHigh: number; targetLow: number; lastUpdated: string | null } | null;
   explanation: string;
   missingData: string[];
 }

@@ -9,6 +9,7 @@ import type { AnalystCounts } from './analystCounts';
 import type { CheapnessResult } from './cheapnessResult';
 import type { DeResult } from './deResult';
 import type { FundamentalsResult } from './fundamentalsResult';
+import type { PriceTarget } from './priceTarget';
 import type { RoicResult } from './roicResult';
 import type { TickerVerdictVerdict } from './tickerVerdictVerdict';
 import type { TickerVerdictVerdictAfterRoic } from './tickerVerdictVerdictAfterRoic';
@@ -33,6 +34,8 @@ export interface TickerVerdict {
   analysts?: AnalystCounts | null;
   roic?: RoicResult;
   de?: DeResult;
+  /** Analyst consensus price target (median, high, low). Null when no coverage. */
+  priceTarget?: PriceTarget | null;
   explanation: string;
   missingData: string[];
 }

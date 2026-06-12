@@ -1,2 +1,4 @@
 - [ROIC scoring architecture](roic-scoring.md) — ROIC is a one-notch modifier on top of cheapness verdict; thresholds + sector config in sector-medians.ts.
 - [FMP v3 for ROIC](fmp-roic.md) — FMP stable API lacks roicTTM; must use v3 endpoint (/api/v3/key-metrics-ttm/{ticker}).
+- [Finnhub industry string mapping](finnhub-industry-strings.md) — Finnhub returns BOTH granular and broad industry strings; INDUSTRY_TO_SECTOR must handle both forms.
+- [Price target API access](price-target-api-access.md) — Both Finnhub and FMP free tiers block price-target-consensus; feature is wired but needs a paid FMP key to activate.

@@ -261,6 +261,59 @@ export async function fetchFmpRoic(ticker: string): Promise<FmpRoicData | null> 
   });
 }
 
+// ── Price target (v3 API) ─────────────────────────────────────────────────────
+
+interface FmpPriceTargetConsensus {
+  symbol?: string;
+  targetHigh?: number | null;
+  targetLow?: number | null;
+  targetConsensus?: number | null;
+  targetMedian?: number | null;
+}
+
+export interface PriceTargetData {
+  targetMedian: number;
+  targetHigh: number;
+  targetLow: number;
+  lastUpdated: string | null;
+}
+
+export async function fetchPriceTarget(ticker: string): Promise<PriceTargetData | null> {
+  const cacheKey = `pt:${ticker}`;
+  if (fmpCache.has(cacheKey)) return getCached<PriceTargetData>(cacheKey);
+
+  return withFmpRateLimit(async () => {
+    // Re-check after waiting in queue
+    if (fmpCache.has(cacheKey)) return getCached<PriceTargetData>(cacheKey);
+
+    // FMP /price-target-consensus requires a paid plan (free tier returns 403/429).
+    // The call is kept in place so it works automatically when a paid key is configured.
+    const raw = await fmpV3Fetch<FmpPriceTargetConsensus[]>(
+      `/price-target-consensus?symbol=${ticker}`
+    );
+
+    const item = Array.isArray(raw) ? raw[0] : null;
+    const median = num(item?.targetMedian) ?? num(item?.targetConsensus);
+    const high = num(item?.targetHigh);
+    const low = num(item?.targetLow);
+
+    if (median === null || median <= 0) {
+      setCache(cacheKey, null as unknown as PriceTargetData);
+      return null;
+    }
+
+    const result: PriceTargetData = {
+      targetMedian: median,
+      targetHigh: high ?? median,
+      targetLow: low ?? median,
+      lastUpdated: null,
+    };
+
+    setCache(cacheKey, result);
+    return result;
+  });
+}
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 function num(v: number | null | undefined): number | null {

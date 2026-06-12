@@ -7,6 +7,7 @@ import type {
   EstimateRevisions,
   RoicResult,
   DeResult,
+  PriceTarget,
   NewsArticle,
 } from "@workspace/api-client-react";
 import { useGetTickerNews } from "@workspace/api-client-react";
@@ -388,6 +389,76 @@ function NewsSection({ ticker }: { ticker: string }) {
   );
 }
 
+// ── Price target section ──────────────────────────────────────────────────────
+
+function PriceTargetSection({
+  priceTarget,
+  currentPrice,
+}: {
+  priceTarget: PriceTarget | null | undefined;
+  currentPrice: number | undefined;
+}) {
+  const upside =
+    priceTarget && currentPrice && currentPrice > 0
+      ? ((priceTarget.targetMedian - currentPrice) / currentPrice) * 100
+      : null;
+
+  const upsideColor =
+    upside === null
+      ? "text-muted-foreground"
+      : upside > 5
+      ? "text-emerald-400"
+      : upside < -5
+      ? "text-red-400"
+      : "text-amber-400";
+
+  const upsideLabel =
+    upside === null ? null : `${upside >= 0 ? "+" : ""}${upside.toFixed(1)}%`;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Price Target
+        </span>
+      </div>
+
+      {!priceTarget ? (
+        <p className="text-xs text-muted-foreground/50 italic">No analyst targets</p>
+      ) : (
+        <div className="space-y-1.5">
+          {/* Median + upside */}
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-base font-bold text-foreground">
+              ${priceTarget.targetMedian.toFixed(2)}
+            </span>
+            {upsideLabel && (
+              <span className={`text-xs font-semibold ${upsideColor}`}>
+                {upsideLabel} upside
+              </span>
+            )}
+          </div>
+
+          {/* High / Low range */}
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground/60">
+            <span>Range</span>
+            <span className="font-mono">${priceTarget.targetLow.toFixed(2)}</span>
+            <span>–</span>
+            <span className="font-mono">${priceTarget.targetHigh.toFixed(2)}</span>
+          </div>
+
+          {/* Updated date */}
+          {priceTarget.lastUpdated && (
+            <p className="text-[10px] text-muted-foreground/40">
+              Updated {priceTarget.lastUpdated.slice(0, 10)}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Analyst section ───────────────────────────────────────────────────────────
 
 function AnalystsSection({
@@ -438,9 +509,10 @@ interface VerdictDetailProps {
   ticker: string;
   data: TickerVerdict | null | undefined;
   loading: boolean;
+  currentPrice?: number;
 }
 
-export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
+export function VerdictDetail({ ticker, data, loading, currentPrice }: VerdictDetailProps) {
   if (loading) {
     return (
       <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -482,7 +554,7 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
         <p className="text-sm text-muted-foreground leading-relaxed">{data.explanation}</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-x-8 gap-y-4 pt-2 border-t border-border/50">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-x-8 gap-y-4 pt-2 border-t border-border/50">
         <CheapnessSection data={data.cheapness} />
         <FundamentalsSection data={data.fundamentals} />
         {data.roic && (
@@ -501,6 +573,7 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
             verdict={data.verdict}
           />
         )}
+        <PriceTargetSection priceTarget={data.priceTarget} currentPrice={currentPrice} />
         <AnalystsSection analysts={data.analysts} />
       </div>
 

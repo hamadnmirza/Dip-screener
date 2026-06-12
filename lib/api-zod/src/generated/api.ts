@@ -193,6 +193,12 @@ export const GetVerdictsResponse = zod.object({
   "note": zod.string().describe('Human-readable one-line interpretation for the detail view'),
   "tag": zod.string().optional().describe('Optional UI tag (e.g. \'High leverage\', \'Negative shareholder equity — verify cause\', \'Debt-free\')')
 }).optional(),
+  "priceTarget": zod.union([zod.object({
+  "targetMedian": zod.number().describe('Median analyst price target'),
+  "targetHigh": zod.number().describe('Highest analyst price target'),
+  "targetLow": zod.number().describe('Lowest analyst price target'),
+  "lastUpdated": zod.string().nullish().describe('Date string when targets were last updated (YYYY-MM-DD)')
+}),zod.null()]).optional().describe('Analyst consensus price target (median, high, low). Null when no coverage.'),
   "explanation": zod.string(),
   "missingData": zod.array(zod.string())
 }),zod.null()]))
