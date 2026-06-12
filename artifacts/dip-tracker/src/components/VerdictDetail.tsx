@@ -6,6 +6,7 @@ import type {
   FundamentalsResult,
   EstimateRevisions,
   RoicResult,
+  DeResult,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VerdictBadge } from "./VerdictBadge";
@@ -176,11 +177,11 @@ const ROIC_FLAG_STYLES: Record<string, { bar: string; text: string; label: strin
   missing:         { bar: "bg-slate-700",        text: "text-muted-foreground/50", label: "Unavailable" },
 };
 
-function RoicSection({ data, verdictShifted, verdictBase, verdict }: {
+function RoicSection({ data, verdictShifted, verdictBase, verdictAfterRoic }: {
   data: RoicResult;
   verdictShifted: boolean;
   verdictBase?: string | null;
-  verdict?: string | null;
+  verdictAfterRoic?: string | null;
 }) {
   const style = ROIC_FLAG_STYLES[data.flag] ?? ROIC_FLAG_STYLES.missing;
   const pct = data.value != null ? `${Math.round(data.value * 100)}%` : null;
@@ -220,10 +221,98 @@ function RoicSection({ data, verdictShifted, verdictBase, verdict }: {
           {data.note}
         </p>
 
-        {/* Shift indicator */}
-        {verdictShifted && verdictBase && verdict && (
+        {/* Shift indicator — only when ROIC itself caused the shift */}
+        {verdictShifted && verdictBase && verdictAfterRoic && (
           <p className="text-[10px] text-sky-400/80 bg-sky-500/10 border border-sky-500/20 rounded px-2 py-1 leading-relaxed">
-            ROIC shifted verdict: "{verdictBase}" → "{verdict}"
+            ROIC shifted verdict: "{verdictBase}" → "{verdictAfterRoic}"
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── D/E (Leverage) section ────────────────────────────────────────────────────
+
+const DE_FLAG_STYLES: Record<string, { dot: string; text: string; label: string; tagColor: string }> = {
+  normal:    { dot: "bg-emerald-500",  text: "text-emerald-400",          label: "Normal",     tagColor: "bg-emerald-500/15 text-emerald-400" },
+  elevated:  { dot: "bg-amber-400",   text: "text-amber-400",            label: "Elevated",   tagColor: "bg-amber-500/15 text-amber-400" },
+  high:      { dot: "bg-red-500",     text: "text-red-400",              label: "High",       tagColor: "bg-red-500/15 text-red-400" },
+  distressed:{ dot: "bg-red-600",     text: "text-red-400",              label: "Distressed", tagColor: "bg-red-600/20 text-red-400" },
+  skipped:   { dot: "bg-slate-600",   text: "text-muted-foreground/50",  label: "N/A",        tagColor: "bg-muted/30 text-muted-foreground/50" },
+  missing:   { dot: "bg-slate-700",   text: "text-muted-foreground/50",  label: "Unavailable",tagColor: "bg-muted/20 text-muted-foreground/40" },
+};
+
+function DeSection({ data, verdictShifted, verdictBeforeDe, verdict }: {
+  data: DeResult;
+  verdictShifted: boolean;
+  verdictBeforeDe?: string | null;
+  verdict?: string | null;
+}) {
+  const style = DE_FLAG_STYLES[data.flag] ?? DE_FLAG_STYLES.missing;
+  const deVal = data.value != null ? `${data.value.toFixed(2)}×` : null;
+  const isNegative = data.flag === "distressed";
+  const isHigh = data.flag === "high";
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Leverage (D/E)</span>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${style.tagColor}`}>
+          {style.label}
+        </span>
+      </div>
+
+      <div className="space-y-1.5">
+        {/* D/E value row */}
+        <div className="flex items-center gap-2 py-0.5">
+          <span className="text-muted-foreground text-xs w-16 shrink-0">D/E Ratio</span>
+          {deVal !== null ? (
+            <span className={`font-mono text-xs font-semibold ${style.text}`}>{deVal}</span>
+          ) : (
+            <span className="text-muted-foreground/50 text-xs italic">—</span>
+          )}
+        </div>
+
+        {/* Sector band */}
+        {data.sectorBand && (
+          <div className="flex items-center gap-2 py-0.5">
+            <span className="text-muted-foreground text-xs w-16 shrink-0">Sector norm</span>
+            <span className="text-xs text-muted-foreground/60 font-mono">
+              ≤{data.sectorBand.elevated}× normal / ≤{data.sectorBand.high}× elevated
+            </span>
+          </div>
+        )}
+
+        {/* Prominent tag for high/distressed */}
+        {data.tag && (isHigh || isNegative) && (
+          <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded ${
+            isNegative ? "bg-red-600/20 text-red-400 border border-red-600/30" : "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+          }`}>
+            {data.tag}
+          </span>
+        )}
+
+        {/* Debt-free tag */}
+        {data.tag && data.flag === "normal" && data.value === 0 && (
+          <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+            {data.tag}
+          </span>
+        )}
+
+        {/* One-line interpretation */}
+        <p className="text-[11px] text-muted-foreground/70 leading-relaxed pt-0.5">
+          {data.note}
+        </p>
+
+        {/* Shift indicator */}
+        {verdictShifted && verdictBeforeDe && verdict && (
+          <p className={`text-[10px] rounded px-2 py-1 leading-relaxed border ${
+            isNegative
+              ? "text-red-400/80 bg-red-500/10 border-red-500/20"
+              : "text-amber-400/80 bg-amber-500/10 border-amber-500/20"
+          }`}>
+            D/E {isNegative ? "capped" : "shifted"} verdict: "{verdictBeforeDe}" → "{verdict}"
           </p>
         )}
       </div>
@@ -307,7 +396,16 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
     );
   }
 
-  const roicShifted = !!(data.roic && data.verdictBase && data.verdict && data.verdictBase !== data.verdict);
+  // ROIC shifted: verdictBase → verdictAfterRoic (ROIC modifier only)
+  const roicShifted = !!(
+    data.roic && data.verdictBase && data.verdictAfterRoic &&
+    data.verdictBase !== data.verdictAfterRoic
+  );
+  // D/E shifted: verdictAfterRoic → verdict (D/E modifier only)
+  const deShifted = !!(
+    data.de && data.verdictAfterRoic && data.verdict &&
+    data.verdictAfterRoic !== data.verdict
+  );
 
   return (
     <div className="p-4 space-y-4">
@@ -316,7 +414,7 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
         <p className="text-sm text-muted-foreground leading-relaxed">{data.explanation}</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-8 gap-y-4 pt-2 border-t border-border/50">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-x-8 gap-y-4 pt-2 border-t border-border/50">
         <CheapnessSection data={data.cheapness} />
         <FundamentalsSection data={data.fundamentals} />
         {data.roic && (
@@ -324,6 +422,14 @@ export function VerdictDetail({ ticker, data, loading }: VerdictDetailProps) {
             data={data.roic}
             verdictShifted={roicShifted}
             verdictBase={data.verdictBase}
+            verdictAfterRoic={data.verdictAfterRoic}
+          />
+        )}
+        {data.de && (
+          <DeSection
+            data={data.de}
+            verdictShifted={deShifted}
+            verdictBeforeDe={data.verdictAfterRoic}
             verdict={data.verdict}
           />
         )}

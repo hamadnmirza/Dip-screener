@@ -7,21 +7,32 @@
  */
 import type { AnalystCounts } from './analystCounts';
 import type { CheapnessResult } from './cheapnessResult';
+import type { DeResult } from './deResult';
 import type { FundamentalsResult } from './fundamentalsResult';
 import type { RoicResult } from './roicResult';
 import type { TickerVerdictVerdict } from './tickerVerdictVerdict';
+import type { TickerVerdictVerdictAfterRoic } from './tickerVerdictVerdictAfterRoic';
 import type { TickerVerdictVerdictBase } from './tickerVerdictVerdictBase';
 
 export interface TickerVerdict {
   ticker: string;
   /** @nullable */
   verdict?: TickerVerdictVerdict;
-  /** @nullable */
+  /**
+     * Verdict before any modifiers (ROIC, D/E) were applied
+     * @nullable
+     */
   verdictBase?: TickerVerdictVerdictBase;
+  /**
+     * Verdict after ROIC modifier, before D/E modifier. Equals final verdict when D/E had no effect.
+     * @nullable
+     */
+  verdictAfterRoic?: TickerVerdictVerdictAfterRoic;
   cheapness: CheapnessResult;
   fundamentals: FundamentalsResult;
   analysts?: AnalystCounts | null;
   roic?: RoicResult;
+  de?: DeResult;
   explanation: string;
   missingData: string[];
 }

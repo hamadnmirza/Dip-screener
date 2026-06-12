@@ -9,6 +9,9 @@
 export * from './analystCounts';
 export * from './cheapnessResult';
 export * from './cheapnessResultLabel';
+export * from './deBand';
+export * from './deResult';
+export * from './deResultFlag';
 export * from './dropRangeCount';
 export * from './dropRangeCountRange';
 export * from './errorResponse';
@@ -44,6 +47,7 @@ export * from './securityMarket';
 export * from './securityTimePeriod';
 export * from './tickerVerdict';
 export * from './tickerVerdictVerdict';
+export * from './tickerVerdictVerdictAfterRoic';
 export * from './tickerVerdictVerdictBase';
 export * from './topMoversResponse';
 export * from './topMoversResponseTimePeriod';

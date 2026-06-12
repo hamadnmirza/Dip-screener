@@ -257,6 +257,46 @@ export interface RoicResult {
   note: string;
 }
 
+export interface DeBand {
+  /** D/E at or below this threshold is considered "elevated" (not yet "high") */
+  elevated: number;
+  /** D/E above this threshold is classified "high" */
+  high: number;
+}
+
+/**
+ * distressed = negative equity; normal = within sector-typical range; elevated = above normal, below high; high = significantly above norm; skipped = not meaningful for this sector (Financials); missing = data unavailable
+
+ */
+export type DeResultFlag = typeof DeResultFlag[keyof typeof DeResultFlag];
+
+
+export const DeResultFlag = {
+  distressed: 'distressed',
+  normal: 'normal',
+  elevated: 'elevated',
+  high: 'high',
+  skipped: 'skipped',
+  missing: 'missing',
+} as const;
+
+export interface DeResult {
+  /** distressed = negative equity; normal = within sector-typical range; elevated = above normal, below high; high = significantly above norm; skipped = not meaningful for this sector (Financials); missing = data unavailable
+   */
+  flag: DeResultFlag;
+  /**
+     * Total D/E ratio (ratio form, e.g. 0.26 = 0.26×). null for skipped/missing.
+     * @nullable
+     */
+  value?: number | null;
+  /** Sector-normal thresholds used for classification. null for skipped sectors. */
+  sectorBand?: DeBand | null;
+  /** Human-readable one-line interpretation for the detail view */
+  note: string;
+  /** Optional UI tag (e.g. 'High leverage', 'Negative shareholder equity — verify cause', 'Debt-free') */
+  tag?: string;
+}
+
 /**
  * @nullable
  */
@@ -271,6 +311,7 @@ export const TickerVerdictVerdict = {
 } as const;
 
 /**
+ * Verdict before any modifiers (ROIC, D/E) were applied
  * @nullable
  */
 export type TickerVerdictVerdictBase = typeof TickerVerdictVerdictBase[keyof typeof TickerVerdictVerdictBase] | null;
@@ -283,16 +324,39 @@ export const TickerVerdictVerdictBase = {
   null: 'null',
 } as const;
 
+/**
+ * Verdict after ROIC modifier, before D/E modifier. Equals final verdict when D/E had no effect.
+ * @nullable
+ */
+export type TickerVerdictVerdictAfterRoic = typeof TickerVerdictVerdictAfterRoic[keyof typeof TickerVerdictVerdictAfterRoic] | null;
+
+
+export const TickerVerdictVerdictAfterRoic = {
+  Undervalued: 'Undervalued',
+  At_value: 'At value',
+  Overvalued: 'Overvalued',
+  null: 'null',
+} as const;
+
 export interface TickerVerdict {
   ticker: string;
   /** @nullable */
   verdict?: TickerVerdictVerdict;
-  /** @nullable */
+  /**
+     * Verdict before any modifiers (ROIC, D/E) were applied
+     * @nullable
+     */
   verdictBase?: TickerVerdictVerdictBase;
+  /**
+     * Verdict after ROIC modifier, before D/E modifier. Equals final verdict when D/E had no effect.
+     * @nullable
+     */
+  verdictAfterRoic?: TickerVerdictVerdictAfterRoic;
   cheapness: CheapnessResult;
   fundamentals: FundamentalsResult;
   analysts?: AnalystCounts | null;
   roic?: RoicResult;
+  de?: DeResult;
   explanation: string;
   missingData: string[];
 }

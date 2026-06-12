@@ -71,6 +71,12 @@ interface FinnhubBasicMetrics {
   netProfitMarginTTM?: number | null;
   /** Return on Investment TTM — percent form (e.g. 26.33 = 26.33%). Proxy for ROIC. */
   roiTTM?: number | null;
+  /**
+   * Total debt / total equity — ratio form (e.g. 0.26 = 26%, NOT percentage).
+   * Negative when equity is negative (distressed). Prefer quarterly (most recent).
+   */
+  "totalDebt/totalEquityQuarterly"?: number | null;
+  "totalDebt/totalEquityAnnual"?: number | null;
 }
 
 interface FinnhubMetricResponse {
@@ -124,6 +130,13 @@ export interface FinnhubValuationData {
    * Null when unavailable or degenerate (|roi| > 200%).
    */
   roiTtm: number | null;
+  /**
+   * Total Debt / Total Equity ratio (ratio form, e.g. 0.26 = 0.26x).
+   * Prefer quarterly (most recent); falls back to annual.
+   * Negative values indicate negative shareholder equity (distressed).
+   * Null when unavailable.
+   */
+  deRatio: number | null;
 }
 
 export interface FinnhubAnalystData {
@@ -159,6 +172,13 @@ export async function fetchFinnhubValuation(ticker: string): Promise<FinnhubValu
   // Filter degenerate values (negative equity → huge |ROI|)
   const roiTtm = rawRoi !== null && Math.abs(rawRoi) <= 200 ? rawRoi : null;
 
+  // D/E: prefer quarterly (most recent), fall back to annual
+  // Allow negative values (negative equity = distressed). Cap at ±500 to filter data errors.
+  const rawDeQ = num(m["totalDebt/totalEquityQuarterly"]);
+  const rawDeA = num(m["totalDebt/totalEquityAnnual"]);
+  const rawDe = rawDeQ ?? rawDeA;
+  const deRatio = rawDe !== null && Math.abs(rawDe) <= 500 ? rawDe : null;
+
   const result: FinnhubValuationData = {
     pe: pe !== null && pe > 0 ? pe : null,
     ps: num(m.psAnnual),
@@ -167,6 +187,7 @@ export async function fetchFinnhubValuation(ticker: string): Promise<FinnhubValu
     sector: profileRes?.finnhubIndustry ?? null,
     isUnprofitable,
     roiTtm,
+    deRatio,
   };
 
   setCache(cacheKey, result);

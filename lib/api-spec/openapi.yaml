@@ -462,6 +462,44 @@ components:
         note:
           type: string
 
+    DeBand:
+      type: object
+      required: [elevated, high]
+      properties:
+        elevated:
+          type: number
+          description: D/E at or below this threshold is considered "elevated" (not yet "high")
+        high:
+          type: number
+          description: D/E above this threshold is classified "high"
+
+    DeResult:
+      type: object
+      required: [flag, note]
+      properties:
+        flag:
+          type: string
+          enum: [distressed, normal, elevated, high, skipped, missing]
+          description: >
+            distressed = negative equity; normal = within sector-typical range;
+            elevated = above normal, below high; high = significantly above norm;
+            skipped = not meaningful for this sector (Financials);
+            missing = data unavailable
+        value:
+          type: ["number", "null"]
+          description: "Total D/E ratio (ratio form, e.g. 0.26 = 0.26×). null for skipped/missing."
+        sectorBand:
+          description: Sector-normal thresholds used for classification. null for skipped sectors.
+          oneOf:
+            - $ref: "#/components/schemas/DeBand"
+            - type: "null"
+        note:
+          type: string
+          description: Human-readable one-line interpretation for the detail view
+        tag:
+          type: string
+          description: "Optional UI tag (e.g. 'High leverage', 'Negative shareholder equity — verify cause', 'Debt-free')"
+
     TickerVerdict:
       type: object
       required: [ticker, cheapness, fundamentals, explanation, missingData]
@@ -482,6 +520,15 @@ components:
             - At value
             - Overvalued
             - "null"
+          description: Verdict before any modifiers (ROIC, D/E) were applied
+        verdictAfterRoic:
+          type: ["string", "null"]
+          enum:
+            - Undervalued
+            - At value
+            - Overvalued
+            - "null"
+          description: Verdict after ROIC modifier, before D/E modifier. Equals final verdict when D/E had no effect.
         cheapness:
           $ref: "#/components/schemas/CheapnessResult"
         fundamentals:
@@ -492,6 +539,8 @@ components:
             - type: "null"
         roic:
           $ref: "#/components/schemas/RoicResult"
+        de:
+          $ref: "#/components/schemas/DeResult"
         explanation:
           type: string
         missingData:

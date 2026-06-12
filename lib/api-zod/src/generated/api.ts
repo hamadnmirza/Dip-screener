@@ -125,7 +125,8 @@ export const GetVerdictsResponse = zod.object({
   "verdicts": zod.record(zod.string(), zod.union([zod.object({
   "ticker": zod.string(),
   "verdict": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish(),
-  "verdictBase": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish(),
+  "verdictBase": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish().describe('Verdict before any modifiers (ROIC, D\/E) were applied'),
+  "verdictAfterRoic": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish().describe('Verdict after ROIC modifier, before D\/E modifier. Equals final verdict when D\/E had no effect.'),
   "cheapness": zod.object({
   "label": zod.enum(['Cheap', 'Not Cheap']),
   "score": zod.number().describe('Raw cheapness score (positive = cheap)'),
@@ -163,6 +164,16 @@ export const GetVerdictsResponse = zod.object({
   "flag": zod.enum(['strong_positive', 'positive', 'neutral', 'negative', 'strong_negative', 'skipped', 'missing']),
   "value": zod.number().nullish(),
   "note": zod.string()
+}).optional(),
+  "de": zod.object({
+  "flag": zod.enum(['distressed', 'normal', 'elevated', 'high', 'skipped', 'missing']).describe('distressed = negative equity; normal = within sector-typical range; elevated = above normal, below high; high = significantly above norm; skipped = not meaningful for this sector (Financials); missing = data unavailable\n'),
+  "value": zod.number().nullish().describe('Total D\/E ratio (ratio form, e.g. 0.26 = 0.26×). null for skipped\/missing.'),
+  "sectorBand": zod.union([zod.object({
+  "elevated": zod.number().describe('D\/E at or below this threshold is considered \"elevated\" (not yet \"high\")'),
+  "high": zod.number().describe('D\/E above this threshold is classified \"high\"')
+}),zod.null()]).optional().describe('Sector-normal thresholds used for classification. null for skipped sectors.'),
+  "note": zod.string().describe('Human-readable one-line interpretation for the detail view'),
+  "tag": zod.string().optional().describe('Optional UI tag (e.g. \'High leverage\', \'Negative shareholder equity — verify cause\', \'Debt-free\')')
 }).optional(),
   "explanation": zod.string(),
   "missingData": zod.array(zod.string())

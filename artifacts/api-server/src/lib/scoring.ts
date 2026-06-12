@@ -13,6 +13,7 @@ import {
   FUNDAMENTALS_THRESHOLDS,
   ROIC_THRESHOLDS,
   getRoicSectorConfig,
+  getDeConfig,
 } from "./sector-medians";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -109,15 +110,50 @@ export interface RoicModification {
   capped?: boolean;
 }
 
+// ── D/E types ─────────────────────────────────────────────────────────────────
+
+export type DeFlag =
+  | "distressed"  // negative equity: liabilities exceed assets
+  | "normal"      // within sector-typical range
+  | "elevated"    // above normal, not yet "high"
+  | "high"        // significantly above sector norm
+  | "skipped"     // sector where D/E is not meaningful (e.g. Financials)
+  | "missing";    // data unavailable
+
+export interface DeResult {
+  flag: DeFlag;
+  /** D/E ratio value (ratio form, e.g. 0.26 = 0.26x). null for skipped/missing. */
+  value: number | null;
+  /** Sector-normal thresholds used for classification. null for skipped. */
+  sectorBand: { elevated: number; high: number } | null;
+  /** Human-readable one-line interpretation for the detail view. */
+  note: string;
+  /** Optional UI tag (e.g. "High leverage", "Negative shareholder equity — verify cause", "Debt-free"). */
+  tag?: string;
+}
+
+export interface DeModification {
+  /** Final verdict after applying the D/E adjustment. */
+  verdict: VerdictLabel;
+  /** True if D/E changed the verdict. */
+  shifted: boolean;
+  shiftDirection?: "down";
+  /** True when distressed cap held the verdict at "At value". */
+  capped?: boolean;
+}
+
 export interface VerdictResult {
   ticker: string;
   verdict: VerdictLabel | null;
-  /** Verdict before ROIC modifier was applied. */
+  /** Verdict before any modifiers (ROIC, D/E) were applied. */
   verdictBase: VerdictLabel | null;
+  /** Verdict after ROIC modifier, before D/E modifier. Equals verdict when D/E had no effect. */
+  verdictAfterRoic: VerdictLabel | null;
   cheapness: CheapnessResult;
   fundamentals: FundamentalsResult;
   analysts: AnalystCounts | null;
   roic: RoicResult;
+  de: DeResult;
   explanation: string;
   missingData: string[];
 }
@@ -312,6 +348,140 @@ export function computeRoicFlag(
   };
 }
 
+// ── D/E scoring ───────────────────────────────────────────────────────────────
+
+/**
+ * Computes the D/E leverage flag for a ticker.
+ * Thresholds live in SECTOR_DE_BANDS in sector-medians.ts.
+ * Financial Services: skipped (leverage is the business model).
+ * Negative D/E: distressed (negative shareholder equity).
+ */
+export function computeDeFlag(
+  deRatio: number | null,
+  finnhubIndustry: string | null
+): DeResult {
+  const { skip, band, sectorName } = getDeConfig(finnhubIndustry);
+
+  if (skip) {
+    return {
+      flag: "skipped",
+      value: null,
+      sectorBand: null,
+      note: "D/E: n/a for financial companies — leverage is the business model.",
+    };
+  }
+
+  if (deRatio === null || !isFinite(deRatio)) {
+    return {
+      flag: "missing",
+      value: null,
+      sectorBand: band,
+      note: "D/E unavailable — no adjustment applied.",
+    };
+  }
+
+  // Negative equity (liabilities exceed assets)
+  if (deRatio < 0) {
+    return {
+      flag: "distressed",
+      value: deRatio,
+      sectorBand: band,
+      note: `D/E ${deRatio.toFixed(2)}× — negative shareholder equity; liabilities exceed assets. Some healthy companies show negative equity from large buyback programs.`,
+      tag: "Negative shareholder equity — verify cause",
+    };
+  }
+
+  const { elevated, high } = band;
+  const sectorLabel = sectorName ?? "sector";
+
+  // Debt-free
+  if (deRatio === 0) {
+    return {
+      flag: "normal",
+      value: 0,
+      sectorBand: band,
+      note: `Debt-free — no leverage risk; clean balance sheet.`,
+      tag: "Debt-free",
+    };
+  }
+
+  // Normal
+  if (deRatio <= elevated) {
+    return {
+      flag: "normal",
+      value: deRatio,
+      sectorBand: band,
+      note: `D/E ${deRatio.toFixed(2)}× — within normal range for ${sectorLabel} (≤${elevated}×); balance sheet not a concern.`,
+    };
+  }
+
+  // Elevated
+  if (deRatio <= high) {
+    return {
+      flag: "elevated",
+      value: deRatio,
+      sectorBand: band,
+      note: `D/E ${deRatio.toFixed(2)}× vs ~${elevated}× typical for ${sectorLabel} — elevated leverage; meaningful earnings pressure could amplify downside.`,
+    };
+  }
+
+  // High
+  return {
+    flag: "high",
+    value: deRatio,
+    sectorBand: band,
+    note: `D/E ${deRatio.toFixed(2)}× vs ~${elevated}× typical for ${sectorLabel} — equity returns will be amplified in both directions; distress risk elevated if earnings weaken.`,
+    tag: "High leverage",
+  };
+}
+
+/**
+ * Applies an ASYMMETRIC D/E leverage adjustment to the current verdict.
+ * normal      → no adjustment (absence of risk ≠ evidence of cheapness; never upgrades).
+ * elevated    → no shift alone, BUT shift down if debtToEbitda > 3 (combined distress signal).
+ * high        → shift one notch unfavourable.
+ * distressed  → cap verdict at "At value" regardless of all other signals.
+ * skipped/missing → no change.
+ */
+export function applyDeModifier(
+  currentVerdict: VerdictLabel,
+  de: DeResult,
+  debtToEbitda: number | null
+): DeModification {
+  const { flag } = de;
+
+  // Distressed: cap at "At value" — the hardest rule, overrides everything
+  if (flag === "distressed") {
+    if (currentVerdict === "Undervalued") {
+      return { verdict: "At value", shifted: true, shiftDirection: "down", capped: true };
+    }
+    return { verdict: currentVerdict, shifted: false };
+  }
+
+  // High: shift one notch unfavourable
+  if (flag === "high") {
+    const idx = VERDICT_SCALE.indexOf(currentVerdict);
+    const newIdx = Math.min(VERDICT_SCALE.length - 1, idx + 1);
+    if (newIdx === idx) return { verdict: currentVerdict, shifted: false };
+    return { verdict: VERDICT_SCALE[newIdx]!, shifted: true, shiftDirection: "down" };
+  }
+
+  // Elevated: shift down ONLY when earnings-coverage gate (debt/EBITDA > 3) is also breached
+  // If debtToEbitda is unavailable (null), the gate is not triggered — no adjustment.
+  if (flag === "elevated") {
+    if (debtToEbitda !== null && debtToEbitda > 3) {
+      const idx = VERDICT_SCALE.indexOf(currentVerdict);
+      const newIdx = Math.min(VERDICT_SCALE.length - 1, idx + 1);
+      if (newIdx === idx) return { verdict: currentVerdict, shifted: false };
+      return { verdict: VERDICT_SCALE[newIdx]!, shifted: true, shiftDirection: "down" };
+    }
+    return { verdict: currentVerdict, shifted: false };
+  }
+
+  // normal, skipped, missing: no adjustment
+  return { verdict: currentVerdict, shifted: false };
+}
+
 /** Ordered scale from most- to least-favourable. */
 const VERDICT_SCALE: VerdictLabel[] = ["Undervalued", "At value", "Overvalued"];
 
@@ -369,7 +539,8 @@ export function generateExplanation(
   cheapness: CheapnessResult,
   fundamentals: FundamentalsResult,
   verdict: VerdictLabel | null,
-  roicContext?: { roic: RoicResult; modification: RoicModification; baseVerdict: VerdictLabel | null }
+  roicContext?: { roic: RoicResult; modification: RoicModification; baseVerdict: VerdictLabel | null },
+  deContext?: { de: DeResult; modification: DeModification; verdictBeforeDe: VerdictLabel | null }
 ): string {
   const pePct = (val: number, median: number) =>
     `${Math.abs(Math.round(Math.abs(val / median - 1) * 100))}%`;
@@ -426,14 +597,31 @@ export function generateExplanation(
 
     if (modification.shiftDirection === "up" && roicPct) {
       sentences.push(
-        `${roicPct} ROIC signals a quality business — upgraded from "${baseVerdict}" to "${verdict}".`
+        `${roicPct} ROIC signals a quality business — upgraded from "${baseVerdict}" to "${deContext?.modification.shifted ? deContext.verdictBeforeDe : verdict}".`
       );
     } else if (modification.shiftDirection === "down" && roicPct) {
       const capNote = modification.capped
         ? ` (strong-negative ROIC cannot produce "Undervalued")`
         : "";
       sentences.push(
-        `${roicPct} ROIC below cost of capital reduces quality — downgraded from "${baseVerdict}" to "${verdict}"${capNote}.`
+        `${roicPct} ROIC below cost of capital reduces quality — downgraded from "${baseVerdict}"${capNote}.`
+      );
+    }
+  }
+
+  // Sentence 4 (optional): D/E modifier narrative when the verdict was shifted
+  if (deContext?.modification.shifted) {
+    const { modification, de, verdictBeforeDe } = deContext;
+    const deVal = de.value !== null ? `${de.value.toFixed(2)}×` : null;
+    const bandVal = de.sectorBand ? `${de.sectorBand.elevated}×` : null;
+
+    if (modification.capped) {
+      sentences.push(
+        `Negative shareholder equity — verdict capped at "${verdict}"; verify cause before acting.`
+      );
+    } else if (deVal && bandVal) {
+      sentences.push(
+        `Screens cheap on multiples, but ${deVal} D/E against a ${bandVal} sector norm raises the bar — downgraded from "${verdictBeforeDe}" to "${verdict}".`
       );
     }
   }

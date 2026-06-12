@@ -7,13 +7,13 @@
  */
 
 /**
- * Verdict before any modifiers (ROIC, D/E) were applied
+ * Verdict after ROIC modifier, before D/E modifier. Equals final verdict when D/E had no effect.
  * @nullable
  */
-export type TickerVerdictVerdictBase = typeof TickerVerdictVerdictBase[keyof typeof TickerVerdictVerdictBase] | null;
+export type TickerVerdictVerdictAfterRoic = typeof TickerVerdictVerdictAfterRoic[keyof typeof TickerVerdictVerdictAfterRoic] | null;
 
 
-export const TickerVerdictVerdictBase = {
+export const TickerVerdictVerdictAfterRoic = {
   Undervalued: 'Undervalued',
   At_value: 'At value',
   Overvalued: 'Overvalued',

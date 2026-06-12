@@ -124,6 +124,25 @@ const INDUSTRY_TO_SECTOR: Record<string, string> = {
   "Real Estate Services":             "Real Estate",
   "Real Estate—Development":          "Real Estate",
 
+  // ── Direct broad-sector passthroughs ─────────────────────────────────────
+  // Finnhub returns these top-level strings for many tickers instead of granular names.
+  // Both granular and broad forms must be handled so classification always resolves.
+  "Technology":             "Technology",
+  "Banking":                "Financials",
+  "Financial Services":     "Financials",
+  "Health Care":            "Health Care",
+  "Healthcare":             "Health Care",
+  "Media":                  "Communication Services",
+  "Retail":                 "Consumer Discretionary",
+  "Automobiles":            "Consumer Discretionary",
+  "Industrials":            "Industrials",
+  "Consumer Staples":       "Consumer Staples",
+  "Consumer Discretionary": "Consumer Discretionary",
+  "Communication Services": "Communication Services",
+  "Energy":                 "Energy",
+  "Real Estate":            "Real Estate",
+  "Materials":              "Materials",
+
   // Materials
   "Chemicals":                        "Materials",
   "Specialty Chemicals":              "Materials",
@@ -183,6 +202,64 @@ export const FUNDAMENTALS_THRESHOLDS = {
   /** Weighted sum > 0 → "Stable/Improving" */
   MOMENTUM_THRESHOLD: 0,
 };
+
+// ── D/E (Debt-to-Equity) configuration ───────────────────────────────────────
+
+export interface DeSectorBand {
+  /** D/E at or below this → "elevated" (not yet "high") */
+  elevated: number;
+  /** D/E above this → "high" */
+  high: number;
+}
+
+/**
+ * Sector-relative D/E bands. Acceptable leverage varies structurally by industry
+ * (capital-structure research: leverage clusters by asset tangibility and cash-flow stability).
+ * Review quarterly.
+ * Last updated: Q2 2026
+ *
+ * Financial Services: skip D/E entirely — leverage is the business model for banks/insurers;
+ * the ratio is structurally huge and meaningless as a distress signal.
+ */
+const SECTOR_DE_BANDS: Record<string, DeSectorBand> = {
+  "Utilities":              { elevated: 1.5, high: 2.5 },
+  "Real Estate":            { elevated: 1.5, high: 2.5 },
+  "Communication Services": { elevated: 1.0, high: 2.0 },
+  "Industrials":            { elevated: 1.0, high: 1.8 },
+  "Consumer Staples":       { elevated: 1.0, high: 1.8 },
+  "Consumer Discretionary": { elevated: 1.0, high: 1.8 },
+  "Energy":                 { elevated: 0.8, high: 1.5 },
+  "Materials":              { elevated: 0.8, high: 1.5 },
+  "Health Care":            { elevated: 0.8, high: 1.5 },
+  "Technology":             { elevated: 0.5, high: 1.2 },
+};
+
+const DEFAULT_DE_BAND: DeSectorBand = { elevated: 1.0, high: 1.8 };
+
+/** Sectors where D/E scoring is skipped — leverage is the core business model. */
+const DE_SKIP_SECTORS = new Set(["Financials"]);
+
+/**
+ * Returns D/E leverage config for a given Finnhub industry string.
+ * skip: true → D/E not meaningful; skip modifier entirely.
+ * band: sector-specific (elevated, high) thresholds.
+ * sectorName: broad sector label for note text (null if unmapped).
+ */
+export function getDeConfig(finnhubIndustry: string | null | undefined): {
+  skip: boolean;
+  band: DeSectorBand;
+  sectorName: string | null;
+} {
+  if (!finnhubIndustry) return { skip: false, band: DEFAULT_DE_BAND, sectorName: null };
+  const sector = INDUSTRY_TO_SECTOR[finnhubIndustry];
+  if (!sector) return { skip: false, band: DEFAULT_DE_BAND, sectorName: null };
+  if (DE_SKIP_SECTORS.has(sector)) return { skip: true, band: DEFAULT_DE_BAND, sectorName: sector };
+  return {
+    skip: false,
+    band: SECTOR_DE_BANDS[sector] ?? DEFAULT_DE_BAND,
+    sectorName: sector,
+  };
+}
 
 // ── ROIC configuration ────────────────────────────────────────────────────────
 

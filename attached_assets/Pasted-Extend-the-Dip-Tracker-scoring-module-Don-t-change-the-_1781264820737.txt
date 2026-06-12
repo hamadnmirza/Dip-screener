@@ -1,0 +1,46 @@
+Extend the Dip Tracker scoring module. Don't change the UI structure, existing metrics, or the ROIC modifier — this adds a D/E (debt-to-equity) leverage adjustment to the stock verdict logic (stocks only).
+Data:
+
+D/E from FMP /ratios-ttm (field: debtEquityRatioTTM). Reuse the existing per-ticker cache; no new fetch pattern.
+Sector from the cached /profile response.
+
+Sector-relative thresholds (config file, not hardcoded in logic):
+
+Maintain a dict of sector-normal D/E bands, because acceptable leverage varies structurally by industry (capital-structure research: leverage clusters by asset tangibility and cash-flow stability). Use these starting values, commented for quarterly review:
+SECTOR_DE_BANDS = {
+  # sector: (elevated_threshold, high_threshold)
+  "Utilities":              (1.5, 2.5),
+  "Real Estate":            (1.5, 2.5),
+  "Communication Services": (1.0, 2.0),
+  "Industrials":            (1.0, 1.8),
+  "Consumer Staples":       (1.0, 1.8),
+  "Consumer Discretionary": (1.0, 1.8),
+  "Energy":                 (0.8, 1.5),
+  "Materials":              (0.8, 1.5),
+  "Healthcare":             (0.8, 1.5),
+  "Technology":             (0.5, 1.2),
+  "DEFAULT":                (1.0, 1.8),
+}
+# Financial Services: skip D/E entirely — leverage is the business model
+# for banks/insurers; the ratio is structurally huge and meaningless as a
+# distress signal. Note "D/E: n/a for financials" in the detail view.
+D/E scoring logic (pure function):
+if sector == "Financial Services": skip
+elif D/E < 0: de_flag = "distressed"        # negative equity: liabilities exceed assets
+elif D/E <= elevated_threshold: de_flag = "normal"
+elif D/E <= high_threshold: de_flag = "elevated"
+else: de_flag = "high"
+How it modifies the verdict — ASYMMETRIC by design:
+
+normal → no adjustment. A clean balance sheet is absence of risk, not evidence of cheapness. Never upgrade a verdict for low D/E.
+elevated → no notch shift on its own, BUT if the existing debt/EBITDA gate is also breached (>3), shift one notch unfavourable. (Leverage level + weak earnings coverage together is the empirically validated distress signature; either alone is weaker evidence.)
+high → shift one notch unfavourable, and add a visible "High leverage" amber tag. In the plain-English explanation, state the amplification point: equity in highly leveraged companies moves disproportionately to the business's value, so the dip may overstate how much the underlying enterprise has actually repriced.
+distressed (negative equity) → cap verdict at "At Value" with a red "Negative equity" tag, regardless of all other signals. Exception: note in a comment that some healthy companies show negative equity from large buybacks (e.g. consumer staples with heavy repurchase programs) — so the tag wording should be "Negative shareholder equity — verify cause" rather than implying insolvency.
+
+Detail view:
+
+Add D/E to the metrics section: value, sector-normal band, flag (green normal / amber elevated / red high or distressed), one-line interpretation, e.g. "D/E 2.1 vs ~1.2 typical for Technology — equity returns will be amplified in both directions; distress risk elevated if earnings weaken."
+If D/E changed the verdict, name it in the explanation: "Screens cheap on multiples, but 2.4x D/E against a 1.2x sector norm raises the bar — downgraded to At Value."
+
+Edge cases: missing D/E → no adjustment, note in detail view; D/E of exactly 0 → "normal" with a "debt-free" tag.
+Keep all thresholds and the asymmetry rules in the config file.

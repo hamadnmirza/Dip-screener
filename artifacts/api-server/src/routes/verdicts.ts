@@ -6,6 +6,8 @@ import {
   computeVerdict,
   computeRoicFlag,
   applyRoicModifier,
+  computeDeFlag,
+  applyDeModifier,
   generateExplanation,
   computeAnalystConsensus,
   type VerdictResult,
@@ -77,9 +79,16 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
       ? applyRoicModifier(verdictBase, roic)
       : { verdict: verdictBase as never, shifted: false };
 
-    const verdict = verdictBase !== null
-      ? roicMod.verdict
-      : null;
+    const verdictAfterRoic = verdictBase !== null ? roicMod.verdict : null;
+
+    // D/E leverage modifier (stocks only; crypto falls through as "missing")
+    // debtToEbitda: not available from Finnhub metric call; pass null → elevated gate skipped
+    const de = computeDeFlag(valuation.deRatio, valuation.sector);
+    const deMod = verdictAfterRoic !== null
+      ? applyDeModifier(verdictAfterRoic, de, null)
+      : { verdict: verdictAfterRoic as never, shifted: false };
+
+    const verdict = verdictAfterRoic !== null ? deMod.verdict : null;
 
     const analysts = analystData
       ? {
@@ -97,6 +106,9 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
       verdict,
       roicMod.shifted
         ? { roic, modification: roicMod, baseVerdict: verdictBase }
+        : undefined,
+      deMod.shifted
+        ? { de, modification: deMod, verdictBeforeDe: verdictAfterRoic }
         : undefined
     );
 
@@ -106,10 +118,12 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
       ticker,
       verdict,
       verdictBase,
+      verdictAfterRoic,
       cheapness,
       fundamentals,
       analysts,
       roic,
+      de,
       explanation,
       missingData: allMissing,
     };
