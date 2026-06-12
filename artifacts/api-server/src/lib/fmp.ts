@@ -63,6 +63,23 @@ async function fmpFetch<T>(path: string): Promise<T | null> {
   }
 }
 
+// ── FMP rate-limit queue ──────────────────────────────────────────────────────
+// FMP free tier has a strict burst limit. Serialise all un-cached calls with a
+// small inter-request gap so we never fire more than ~4 requests/second.
+// Once a ticker is cached (1 h TTL), it never touches this queue again.
+
+const FMP_INTER_REQUEST_MS = 250; // 4 req/s max
+let fmpQueueTail: Promise<void> = Promise.resolve();
+
+function withFmpRateLimit<T>(fn: () => Promise<T | null>): Promise<T | null> {
+  const result: Promise<T | null> = fmpQueueTail.then(fn, fn);
+  // Extend the tail: whatever came before + this call + cooldown
+  fmpQueueTail = result
+    .then(() => new Promise<void>((r) => setTimeout(r, FMP_INTER_REQUEST_MS)))
+    .catch(() => new Promise<void>((r) => setTimeout(r, FMP_INTER_REQUEST_MS)));
+  return result;
+}
+
 // ── HTTP helper (v3 API) ──────────────────────────────────────────────────────
 
 async function fmpV3Fetch<T>(path: string): Promise<T | null> {
@@ -225,16 +242,23 @@ export async function fetchFmpRoic(ticker: string): Promise<FmpRoicData | null> 
   const cached = getCached<FmpRoicData>(cacheKey);
   if (cached) return cached;
 
-  const data = await fmpV3Fetch<FmpKeyMetricsTtmV3[]>(`/key-metrics-ttm/${ticker}`);
-  if (!data || data.length === 0) return null;
+  // Enqueue through the rate limiter — all un-cached calls run one at a time
+  return withFmpRateLimit(async () => {
+    // Re-check cache: another queued request may have populated it while we waited
+    const cached2 = getCached<FmpRoicData>(cacheKey);
+    if (cached2) return cached2;
 
-  const raw = data[0]?.roicTTM ?? null;
-  const roicTTM =
-    raw !== null && isFinite(raw) && Math.abs(raw) <= 2.0 ? raw : null;
+    const data = await fmpV3Fetch<FmpKeyMetricsTtmV3[]>(`/key-metrics-ttm/${ticker}`);
+    if (!data || data.length === 0) return null;
 
-  const result: FmpRoicData = { roicTTM };
-  setCache(cacheKey, result);
-  return result;
+    const raw = data[0]?.roicTTM ?? null;
+    const roicTTM =
+      raw !== null && isFinite(raw) && Math.abs(raw) <= 2.0 ? raw : null;
+
+    const result: FmpRoicData = { roicTTM };
+    setCache(cacheKey, result);
+    return result;
+  });
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────
