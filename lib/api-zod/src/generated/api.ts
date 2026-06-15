@@ -36,6 +36,32 @@ export const GetTickerNewsResponse = zod.object({
 
 
 /**
+ * Returns current price data for a comma-separated list of tickers. Uses the 24h period cache. Useful for watchlists — tickers are returned even if they are not currently falling.
+ * @summary Get current price data for specific tickers
+ */
+export const GetSecuritiesByTickersQueryParams = zod.object({
+  "tickers": zod.coerce.string().describe('Comma-separated list of ticker symbols (max 50)')
+})
+
+export const GetSecuritiesByTickersResponse = zod.object({
+  "securities": zod.array(zod.object({
+  "ticker": zod.string().describe('Stock\/crypto ticker symbol'),
+  "name": zod.string().describe('Full name of the security'),
+  "assetType": zod.enum(['equity', 'crypto']),
+  "market": zod.enum(['NASDAQ', 'FTSE100', 'FTSE250', 'SP500', 'CRYPTO']),
+  "currentPrice": zod.number().describe('Current price'),
+  "previousPrice": zod.number().describe('Price at the start of the time period'),
+  "percentChange": zod.number().describe('Percentage change (negative = drop)'),
+  "timePeriod": zod.enum(['1h', '24h', '1w', '1m']),
+  "currency": zod.string().describe('Currency code (USD, GBP, etc.)'),
+  "volume": zod.number().nullish().describe('Trading volume')
+})),
+  "total": zod.number().describe('Total number of matching securities'),
+  "lastUpdated": zod.string().describe('ISO timestamp of last data refresh')
+})
+
+
+/**
  * Returns a filtered list of equities and crypto that have dropped by specified criteria. Data refreshes every 15 minutes.
  * @summary List securities that have fallen in price
  */

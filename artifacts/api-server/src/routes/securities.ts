@@ -16,6 +16,42 @@ function parsePeriod(val: unknown): TimePeriod {
   return "24h";
 }
 
+router.get("/securities/by-tickers", async (req, res) => {
+  try {
+    const raw = req.query.tickers;
+    if (!raw || typeof raw !== "string") {
+      res.status(400).json({ error: "tickers query param is required" });
+      return;
+    }
+    const requested = raw
+      .split(",")
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, 50);
+
+    if (requested.length === 0) {
+      res.status(400).json({ error: "No valid tickers provided" });
+      return;
+    }
+
+    const all = await getSecuritiesForPeriod("24h");
+    const tickerSet = new Set(requested);
+    const matched = all.filter((s) => tickerSet.has(s.ticker));
+
+    const { timestamp, nextRefreshAt } = getOverallLastUpdated();
+
+    res.json({
+      securities: matched,
+      total: matched.length,
+      lastUpdated: timestamp?.toISOString() ?? new Date().toISOString(),
+      nextRefreshAt: nextRefreshAt?.toISOString() ?? null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching securities by tickers");
+    res.status(500).json({ error: "Failed to fetch securities data" });
+  }
+});
+
 router.get("/securities", async (req, res) => {
   try {
     const period = parsePeriod(req.query.timePeriod);

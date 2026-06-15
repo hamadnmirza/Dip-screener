@@ -11,21 +11,23 @@ import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { VerdictBadge } from "./VerdictBadge";
 import { VerdictDetail } from "./VerdictDetail";
+import { StarButton } from "./StarButton";
 
 interface SecuritiesTableProps {
   params: ListSecuritiesParams;
+  isWatched: (ticker: string) => boolean;
+  onToggleWatch: (ticker: string) => void;
 }
 
-const COL_COUNT = 6;
+const COL_COUNT = 7;
 
-export function SecuritiesTable({ params }: SecuritiesTableProps) {
+export function SecuritiesTable({ params, isWatched, onToggleWatch }: SecuritiesTableProps) {
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useListSecurities(params, {
     query: { queryKey: getListSecuritiesQueryKey(params) },
   });
 
-  // Collect equity tickers from the current result for lazy verdict fetching
   const equityTickers =
     data?.securities
       .filter((s) => s.assetType === "equity")
@@ -33,10 +35,7 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
 
   const tickersParam = equityTickers.join(",");
 
-  const {
-    data: verdictsData,
-    isLoading: verdictsLoading,
-  } = useGetVerdicts(
+  const { data: verdictsData, isLoading: verdictsLoading } = useGetVerdicts(
     { tickers: tickersParam },
     {
       query: {
@@ -60,6 +59,7 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
+              <TableHead className="w-8" />
               <TableHead>Ticker</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Market</TableHead>
@@ -71,6 +71,7 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
           <TableBody>
             {[...Array(10)].map((_, i) => (
               <TableRow key={i}>
+                <TableCell><Skeleton className="h-5 w-5" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-20" /></TableCell>
@@ -103,14 +104,8 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
       >
         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
           <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
             className="text-muted-foreground"
           >
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -124,7 +119,6 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
     );
   }
 
-  // Sort by biggest drop first
   const sortedSecurities = [...data.securities].sort(
     (a, b) => a.percentChange - b.percentChange
   );
@@ -137,6 +131,7 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
       <Table>
         <TableHeader className="bg-muted/30">
           <TableRow className="hover:bg-transparent border-b-border">
+            <TableHead className="w-8" />
             <TableHead className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">
               Ticker
             </TableHead>
@@ -162,6 +157,7 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
             const isEquity = security.assetType === "equity";
             const isExpanded = expandedTicker === security.ticker;
             const tickerVerdict = isEquity ? verdictMap[security.ticker] : undefined;
+            const watched = isWatched(security.ticker);
 
             return (
               <React.Fragment key={`${security.ticker}-${security.market}`}>
@@ -173,14 +169,18 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
                   } ${isExpanded ? "bg-muted/10" : ""}`}
                   onClick={() => handleRowClick(security.ticker, isEquity)}
                 >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <StarButton
+                      watched={watched}
+                      onToggle={() => onToggleWatch(security.ticker)}
+                    />
+                  </TableCell>
                   <TableCell className="font-bold text-foreground">
                     <span className="flex items-center gap-1.5">
                       {security.ticker}
                       {isEquity && (
                         <svg
-                          width="10"
-                          height="10"
-                          viewBox="0 0 10 10"
+                          width="10" height="10" viewBox="0 0 10 10"
                           className={`text-muted-foreground/40 transition-transform flex-shrink-0 ${isExpanded ? "rotate-180" : ""}`}
                           fill="currentColor"
                         >
@@ -207,15 +207,11 @@ export function SecuritiesTable({ params }: SecuritiesTableProps) {
                     ) : verdictsLoading ? (
                       <Skeleton className="h-5 w-24 ml-auto" />
                     ) : (
-                      <VerdictBadge
-                        verdict={tickerVerdict?.verdict ?? null}
-                        size="sm"
-                      />
+                      <VerdictBadge verdict={tickerVerdict?.verdict ?? null} size="sm" />
                     )}
                   </TableCell>
                 </TableRow>
 
-                {/* Expanded detail row */}
                 {isExpanded && (
                   <TableRow className="bg-muted/5 border-b border-border hover:bg-muted/5">
                     <TableCell colSpan={COL_COUNT} className="p-0">

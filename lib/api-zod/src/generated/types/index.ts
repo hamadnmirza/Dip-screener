@@ -19,6 +19,7 @@ export * from './estimateRevisions';
 export * from './estimateRevisionsDirection';
 export * from './fundamentalsResult';
 export * from './fundamentalsResultLabel';
+export * from './getSecuritiesByTickersParams';
 export * from './getSecuritiesSummaryParams';
 export * from './getSecuritiesSummaryTimePeriod';
 export * from './getTopMoversAssetType';

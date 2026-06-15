@@ -17,6 +17,7 @@ import type {
 
 import type {
   ErrorResponse,
+  GetSecuritiesByTickersParams,
   GetSecuritiesSummaryParams,
   GetTopMoversParams,
   GetVerdictsParams,
@@ -186,6 +187,91 @@ export function useGetTickerNews<TData = Awaited<ReturnType<typeof getTickerNews
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetTickerNewsQueryOptions(ticker,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetSecuritiesByTickersUrl = (params: GetSecuritiesByTickersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/securities/by-tickers?${stringifiedParams}` : `/api/securities/by-tickers`
+}
+
+/**
+ * Returns current price data for a comma-separated list of tickers. Uses the 24h period cache. Useful for watchlists — tickers are returned even if they are not currently falling.
+ * @summary Get current price data for specific tickers
+ */
+export const getSecuritiesByTickers = async (params: GetSecuritiesByTickersParams, options?: RequestInit): Promise<SecuritiesResponse> => {
+
+  return customFetch<SecuritiesResponse>(getGetSecuritiesByTickersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSecuritiesByTickersQueryKey = (params?: GetSecuritiesByTickersParams,) => {
+    return [
+    `/api/securities/by-tickers`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetSecuritiesByTickersQueryOptions = <TData = Awaited<ReturnType<typeof getSecuritiesByTickers>>, TError = ErrorType<ErrorResponse>>(params: GetSecuritiesByTickersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSecuritiesByTickers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSecuritiesByTickersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSecuritiesByTickers>>> = ({ signal }) => getSecuritiesByTickers(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSecuritiesByTickers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSecuritiesByTickersQueryResult = NonNullable<Awaited<ReturnType<typeof getSecuritiesByTickers>>>
+export type GetSecuritiesByTickersQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get current price data for specific tickers
+ */
+
+export function useGetSecuritiesByTickers<TData = Awaited<ReturnType<typeof getSecuritiesByTickers>>, TError = ErrorType<ErrorResponse>>(
+ params: GetSecuritiesByTickersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSecuritiesByTickers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSecuritiesByTickersQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

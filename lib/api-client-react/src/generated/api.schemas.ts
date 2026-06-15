@@ -392,6 +392,13 @@ export interface VerdictsResponse {
   verdicts: VerdictsResponseVerdicts;
 }
 
+export type GetSecuritiesByTickersParams = {
+/**
+ * Comma-separated list of ticker symbols (max 50)
+ */
+tickers: string;
+};
+
 export type ListSecuritiesParams = {
 /**
  * Filter by asset type: equity or crypto
