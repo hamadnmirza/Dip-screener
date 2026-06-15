@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { SummaryBar } from "@/components/SummaryBar";
 import { TopMovers } from "@/components/TopMovers";
 import { SecuritiesTable } from "@/components/SecuritiesTable";
+import type { CauseMoveFilter } from "@/components/SecuritiesTable";
 import { WatchlistTable } from "@/components/WatchlistTable";
 import { LastUpdatedBar } from "@/components/LastUpdatedBar";
 import { useWatchlist } from "@/hooks/useWatchlist";
@@ -25,6 +26,7 @@ export default function Home() {
   const [assetType, setAssetType] = useState<ListSecuritiesAssetType | "all">("all");
   const [market, setMarket] = useState<ListSecuritiesMarket | "all">("all");
   const [dropRange, setDropRange] = useState<ListSecuritiesDropRange | "all">("all");
+  const [causeFilter, setCauseFilter] = useState<CauseMoveFilter>("all");
 
   const { entries, tickers: watchedTickers, toggle: toggleWatch, isWatched } = useWatchlist();
 
@@ -160,6 +162,27 @@ export default function Home() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Cause filter — equities only */}
+              {(assetType === "all" || assetType === "equity") && (
+                <div className="space-y-1.5 flex-1 min-w-[150px]">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cause</Label>
+                  <Select
+                    value={causeFilter}
+                    onValueChange={(v) => setCauseFilter(v as CauseMoveFilter)}
+                  >
+                    <SelectTrigger data-testid="select-cause-filter" className="bg-background border-border">
+                      <SelectValue placeholder="All Causes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Causes</SelectItem>
+                      <SelectItem value="company_specific">Company-specific only</SelectItem>
+                      <SelectItem value="market_driven">Market / sector driven</SelectItem>
+                      <SelectItem value="relative_outperformer">Outperforming sector</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <TopMovers params={moversParams} />
@@ -170,6 +193,7 @@ export default function Home() {
                 params={listParams}
                 isWatched={isWatched}
                 onToggleWatch={toggleWatch}
+                causeFilter={causeFilter}
               />
               <p className="mt-3 text-[11px] text-muted-foreground/40 leading-relaxed">
                 This is not financial advice. Verdicts reflect P/E and P/S ratios relative to sector medians at the time of calculation and may not account for qualitative factors, non-financial risks, or information not captured in the metrics shown. Always do your own research before making any investment decisions.

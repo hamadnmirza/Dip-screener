@@ -3,6 +3,7 @@ import React from "react";
 export type VerdictString =
   | "Undervalued"
   | "At value"
+  | "Overvalued (adjusted)"
   | "Overvalued"
   | null
   | undefined;
@@ -13,9 +14,10 @@ interface VerdictBadgeProps {
 }
 
 const VERDICT_STYLES: Record<string, string> = {
-  "Undervalued": "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
-  "At value":    "bg-sky-500/15 text-sky-400 border border-sky-500/30",
-  "Overvalued":  "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+  "Undervalued":           "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
+  "At value":              "bg-sky-500/15 text-sky-400 border border-sky-500/30",
+  "Overvalued (adjusted)": "bg-amber-500/10 text-amber-300/80 border border-amber-500/20",
+  "Overvalued":            "bg-amber-500/15 text-amber-400 border border-amber-500/30",
 };
 
 export function VerdictBadge({ verdict, size = "sm" }: VerdictBadgeProps) {

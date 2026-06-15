@@ -6,15 +6,19 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * ROIC quality tier — one shared definition for display labels and override logic. elite = ≥30% ROIC (full notch upgrade eligible); high = 20–30% (full notch eligible); value_creating = WACC_proxy < ROIC < 20% (soft notch only); marginal = around WACC_proxy (no override); value_destroying = below WACC_proxy − 3pts (no override); skipped = not applicable (Financials); missing = data unavailable.
+
+ */
 export type RoicResultFlag = typeof RoicResultFlag[keyof typeof RoicResultFlag];
 
 
 export const RoicResultFlag = {
-  strong_positive: 'strong_positive',
-  positive: 'positive',
-  neutral: 'neutral',
-  negative: 'negative',
-  strong_negative: 'strong_negative',
+  elite: 'elite',
+  high: 'high',
+  value_creating: 'value_creating',
+  marginal: 'marginal',
+  value_destroying: 'value_destroying',
   skipped: 'skipped',
   missing: 'missing',
 } as const;

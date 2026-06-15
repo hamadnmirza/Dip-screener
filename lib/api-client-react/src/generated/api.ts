@@ -16,7 +16,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  DropClassification,
   ErrorResponse,
+  GetDropCauseParams,
   GetSecuritiesByTickersParams,
   GetSecuritiesSummaryParams,
   GetTopMoversParams,
@@ -605,6 +607,92 @@ export function useGetLastUpdated<TData = Awaited<ReturnType<typeof getLastUpdat
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLastUpdatedQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetDropCauseUrl = (params: GetDropCauseParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/drop-cause?${stringifiedParams}` : `/api/drop-cause`
+}
+
+/**
+ * Returns a sector-relative move analysis and cause classification for a given ticker and time period. Uses existing news feed and benchmark ETF data. Cached 15 minutes. Equities only — crypto returns unknown classification. Decision-support signal only, not investment advice.
+
+ * @summary Classify why a security dropped
+ */
+export const getDropCause = async (params: GetDropCauseParams, options?: RequestInit): Promise<DropClassification> => {
+
+  return customFetch<DropClassification>(getGetDropCauseUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDropCauseQueryKey = (params?: GetDropCauseParams,) => {
+    return [
+    `/api/drop-cause`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDropCauseQueryOptions = <TData = Awaited<ReturnType<typeof getDropCause>>, TError = ErrorType<ErrorResponse>>(params: GetDropCauseParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDropCause>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDropCauseQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDropCause>>> = ({ signal }) => getDropCause(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDropCause>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDropCauseQueryResult = NonNullable<Awaited<ReturnType<typeof getDropCause>>>
+export type GetDropCauseQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Classify why a security dropped
+ */
+
+export function useGetDropCause<TData = Awaited<ReturnType<typeof getDropCause>>, TError = ErrorType<ErrorResponse>>(
+ params: GetDropCauseParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDropCause>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDropCauseQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

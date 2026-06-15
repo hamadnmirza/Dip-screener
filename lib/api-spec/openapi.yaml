@@ -16,6 +16,8 @@ tags:
     description: Valuation and fundamental momentum verdicts for stock tickers
   - name: news
     description: Recent company news articles for a ticker
+  - name: drop-cause
+    description: Why a security dropped — sector-relative move + cause classification
 paths:
   /healthz:
     get:
@@ -216,6 +218,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LastUpdated"
+
+  /drop-cause:
+    get:
+      operationId: getDropCause
+      tags: [drop-cause]
+      summary: Classify why a security dropped
+      description: >
+        Returns a sector-relative move analysis and cause classification for a
+        given ticker and time period. Uses existing news feed and benchmark ETF
+        data. Cached 15 minutes. Equities only — crypto returns unknown classification.
+        Decision-support signal only, not investment advice.
+      parameters:
+        - name: ticker
+          in: query
+          required: true
+          description: Stock ticker symbol (e.g. AAPL, AZN)
+          schema:
+            type: string
+        - name: period
+          in: query
+          required: false
+          description: "Time period matching the scanner selection (default: 24h)"
+          schema:
+            type: string
+            enum: [1h, 24h, 1w, 1m]
+      responses:
+        "200":
+          description: Drop cause classification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DropClassification"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /verdicts:
     get:
@@ -552,18 +598,34 @@ components:
       properties:
         flag:
           type: string
+          description: >
+            ROIC quality tier — one shared definition for display labels and override logic.
+            elite = ≥30% ROIC (full notch upgrade eligible);
+            high = 20–30% (full notch eligible);
+            value_creating = WACC_proxy < ROIC < 20% (soft notch only);
+            marginal = around WACC_proxy (no override);
+            value_destroying = below WACC_proxy − 3pts (no override);
+            skipped = not applicable (Financials);
+            missing = data unavailable.
           enum:
-            - strong_positive
-            - positive
-            - neutral
-            - negative
-            - strong_negative
+            - elite
+            - high
+            - value_creating
+            - marginal
+            - value_destroying
             - skipped
             - missing
         value:
           type: ["number", "null"]
+          description: "ROIC as decimal (e.g. 0.16 = 16%). null for skipped/missing."
         note:
           type: string
+          description: Human-readable tier interpretation for the detail view
+        overrideRationale:
+          type: ["string", "null"]
+          description: >
+            Generated rationale explaining the ROIC override decision, including the
+            leverage interaction. Set when the modifier ran; null when ROIC is skipped/missing.
 
     DeBand:
       type: object
@@ -611,9 +673,14 @@ components:
           type: string
         verdict:
           type: ["string", "null"]
+          description: >
+            Final valuation verdict. "Overvalued (adjusted)" means the business earns
+            above cost-of-capital (ROIC soft notch) but not strongly enough for a clean
+            "At value" upgrade — quality awareness without unqualified upgrade.
           enum:
             - Undervalued
             - At value
+            - Overvalued (adjusted)
             - Overvalued
             - "null"
         verdictBase:
@@ -629,6 +696,7 @@ components:
           enum:
             - Undervalued
             - At value
+            - Overvalued (adjusted)
             - Overvalued
             - "null"
           description: Verdict after ROIC modifier, before D/E modifier. Equals final verdict when D/E had no effect.
@@ -666,3 +734,137 @@ components:
             oneOf:
               - $ref: "#/components/schemas/TickerVerdict"
               - type: "null"
+
+    # ── Drop-cause schemas ────────────────────────────────────────────────────
+
+    DropEvidence:
+      type: object
+      required: [headline, source, url, published]
+      properties:
+        headline:
+          type: string
+          description: Article headline as displayed in the Recent News feed
+        source:
+          type: string
+          description: News source name
+        url:
+          type: string
+          description: Link to the article
+        published:
+          type: string
+          description: ISO 8601 publish datetime
+
+    DropCause:
+      type: object
+      required: [dominant, secondary, signal]
+      properties:
+        dominant:
+          type: string
+          enum:
+            - sector_macro
+            - technical_no_news
+            - operational_stumble
+            - thesis_impairment
+            - secular_decline
+            - solvency_stress
+            - governance_accounting
+            - corporate_action
+            - unknown
+          description: The single most likely cause category for the drop
+        secondary:
+          type: array
+          items:
+            type: string
+            enum:
+              - sector_macro
+              - technical_no_news
+              - operational_stumble
+              - thesis_impairment
+              - secular_decline
+              - solvency_stress
+              - governance_accounting
+              - corporate_action
+              - unknown
+          description: Additional cause categories with weaker evidence
+        signal:
+          type: string
+          enum: [green, amber, red, neutral]
+          description: >
+            Severity signal for colour coding.
+            green = least concerning (sector move);
+            amber = ambiguous — review warranted;
+            red = likely deterioration — elevated concern;
+            neutral = corporate action (context-dependent).
+
+    DropClassification:
+      type: object
+      required:
+        - ticker
+        - asOf
+        - period
+        - sectorBenchmark
+        - moveType
+        - cause
+        - confidence
+        - evidenceAvailable
+        - evidence
+        - rationale
+        - disclaimer
+      properties:
+        ticker:
+          type: string
+        asOf:
+          type: string
+          description: ISO 8601 timestamp when classification was computed
+        period:
+          type: string
+          enum: [1h, 24h, 1w, 1m]
+        stockReturn:
+          type: ["number", "null"]
+          description: Ticker's percent change over the period (negative = drop)
+        sectorBenchmark:
+          type: string
+          description: ETF ticker used as sector benchmark (e.g. XLK, EWU, SPY)
+        sectorReturn:
+          type: ["number", "null"]
+          description: Benchmark ETF percent change over the same period
+        excessMove:
+          type: ["number", "null"]
+          description: >
+            stockReturn − sectorReturn. Negative = fell more than sector (company-specific);
+            near zero = moved with sector; positive = outperformed sector.
+        moveType:
+          type: string
+          enum:
+            - company_specific
+            - market_driven
+            - relative_outperformer
+            - insufficient_data
+          description: >
+            company_specific: excess move ≤ −2% (fell materially more than sector);
+            market_driven: within ±2%/+1% of sector;
+            relative_outperformer: fell less than sector;
+            insufficient_data: benchmark or price data unavailable.
+        cause:
+          $ref: "#/components/schemas/DropCause"
+        confidence:
+          type: string
+          enum: [high, medium, low]
+          description: >
+            high = sector move computed AND news keyword match;
+            medium = one of those;
+            low = neither (price-only classification).
+        evidenceAvailable:
+          type: boolean
+          description: True when at least one news article was found
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/DropEvidence"
+          description: News items from the existing feed that support the classification
+        rationale:
+          type: string
+          description: Human-readable explanation of the classification
+        disclaimer:
+          type: string
+          description: Always "Decision-support signal, not investment advice."

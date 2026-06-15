@@ -16,6 +16,7 @@ export type TickerVerdictVerdictAfterRoic = typeof TickerVerdictVerdictAfterRoic
 export const TickerVerdictVerdictAfterRoic = {
   Undervalued: 'Undervalued',
   At_value: 'At value',
+  'Overvalued_(adjusted)': 'Overvalued (adjusted)',
   Overvalued: 'Overvalued',
   null: 'null',
 } as const;

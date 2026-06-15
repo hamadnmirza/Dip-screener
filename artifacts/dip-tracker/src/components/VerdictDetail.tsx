@@ -13,6 +13,7 @@ import type {
 import { useGetTickerNews } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VerdictBadge } from "./VerdictBadge";
+import { WhyItDropped } from "./WhyItDropped";
 
 // ── Multiple row ──────────────────────────────────────────────────────────────
 
@@ -171,11 +172,11 @@ function FundamentalsSection({ data }: { data: FundamentalsResult }) {
 // ── ROIC section ──────────────────────────────────────────────────────────────
 
 const ROIC_FLAG_STYLES: Record<string, { bar: string; text: string; label: string }> = {
-  strong_positive: { bar: "bg-emerald-500",     text: "text-emerald-400",       label: "Elite" },
-  positive:        { bar: "bg-emerald-500/70",   text: "text-emerald-400/80",    label: "Value-Creating" },
-  neutral:         { bar: "bg-slate-500",        text: "text-muted-foreground",  label: "Neutral" },
-  negative:        { bar: "bg-amber-500",        text: "text-amber-400",         label: "Below WACC" },
-  strong_negative: { bar: "bg-red-500",          text: "text-red-400",           label: "Destroys Capital" },
+  elite:           { bar: "bg-emerald-400",      text: "text-emerald-300",       label: "Elite" },
+  high:            { bar: "bg-emerald-500",      text: "text-emerald-400",       label: "Strong" },
+  value_creating:  { bar: "bg-emerald-500/60",   text: "text-emerald-400/80",    label: "Value-Creating" },
+  marginal:        { bar: "bg-slate-500",        text: "text-muted-foreground",  label: "Marginal" },
+  value_destroying:{ bar: "bg-red-500",          text: "text-red-400",           label: "Value-Destroying" },
   skipped:         { bar: "bg-slate-700",        text: "text-muted-foreground/50", label: "N/A" },
   missing:         { bar: "bg-slate-700",        text: "text-muted-foreground/50", label: "Unavailable" },
 };
@@ -224,8 +225,18 @@ function RoicSection({ data, verdictShifted, verdictBase, verdictAfterRoic }: {
           {data.note}
         </p>
 
-        {/* Shift indicator — only when ROIC itself caused the shift */}
-        {verdictShifted && verdictBase && verdictAfterRoic && (
+        {/* Override rationale — shows whenever the modifier ran (shifted or not) */}
+        {data.overrideRationale && (
+          <p className={`text-[10px] rounded px-2 py-1.5 leading-relaxed border ${
+            verdictShifted
+              ? "text-sky-400/90 bg-sky-500/10 border-sky-500/20"
+              : "text-muted-foreground/60 bg-muted/20 border-border/30"
+          }`}>
+            {data.overrideRationale}
+          </p>
+        )}
+        {/* Fallback shift indicator when no rationale (backward compat) */}
+        {!data.overrideRationale && verdictShifted && verdictBase && verdictAfterRoic && (
           <p className="text-[10px] text-sky-400/80 bg-sky-500/10 border border-sky-500/20 rounded px-2 py-1 leading-relaxed">
             ROIC shifted verdict: "{verdictBase}" → "{verdictAfterRoic}"
           </p>
@@ -510,9 +521,10 @@ interface VerdictDetailProps {
   data: TickerVerdict | null | undefined;
   loading: boolean;
   currentPrice?: number;
+  period?: string;
 }
 
-export function VerdictDetail({ ticker, data, loading, currentPrice }: VerdictDetailProps) {
+export function VerdictDetail({ ticker, data, loading, currentPrice, period = "24h" }: VerdictDetailProps) {
   if (loading) {
     return (
       <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -582,6 +594,11 @@ export function VerdictDetail({ ticker, data, loading, currentPrice }: VerdictDe
           Data unavailable: {data.missingData.join(", ")}
         </p>
       )}
+
+      {/* Why It Dropped — before the news feed */}
+      <div className="pt-2 border-t border-border/30">
+        <WhyItDropped ticker={ticker} period={period} />
+      </div>
 
       <NewsSection ticker={ticker} />
     </div>

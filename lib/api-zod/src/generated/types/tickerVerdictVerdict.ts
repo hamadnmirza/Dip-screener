@@ -7,6 +7,8 @@
  */
 
 /**
+ * Final valuation verdict. "Overvalued (adjusted)" means the business earns above cost-of-capital (ROIC soft notch) but not strongly enough for a clean "At value" upgrade — quality awareness without unqualified upgrade.
+
  * @nullable
  */
 export type TickerVerdictVerdict = typeof TickerVerdictVerdict[keyof typeof TickerVerdictVerdict] | null;
@@ -15,6 +17,7 @@ export type TickerVerdictVerdict = typeof TickerVerdictVerdict[keyof typeof Tick
 export const TickerVerdictVerdict = {
   Undervalued: 'Undervalued',
   At_value: 'At value',
+  'Overvalued_(adjusted)': 'Overvalued (adjusted)',
   Overvalued: 'Overvalued',
   null: 'null',
 } as const;

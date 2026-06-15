@@ -158,6 +158,43 @@ export const GetLastUpdatedResponse = zod.object({
 
 
 /**
+ * Returns a sector-relative move analysis and cause classification for a given ticker and time period. Uses existing news feed and benchmark ETF data. Cached 15 minutes. Equities only — crypto returns unknown classification. Decision-support signal only, not investment advice.
+
+ * @summary Classify why a security dropped
+ */
+export const GetDropCauseQueryParams = zod.object({
+  "ticker": zod.coerce.string().describe('Stock ticker symbol (e.g. AAPL, AZN)'),
+  "period": zod.enum(['1h', '24h', '1w', '1m']).optional().describe('Time period matching the scanner selection (default: 24h)')
+})
+
+export const GetDropCauseResponse = zod.object({
+  "ticker": zod.string(),
+  "asOf": zod.string().describe('ISO 8601 timestamp when classification was computed'),
+  "period": zod.enum(['1h', '24h', '1w', '1m']),
+  "stockReturn": zod.number().nullish().describe('Ticker\'s percent change over the period (negative = drop)'),
+  "sectorBenchmark": zod.string().describe('ETF ticker used as sector benchmark (e.g. XLK, EWU, SPY)'),
+  "sectorReturn": zod.number().nullish().describe('Benchmark ETF percent change over the same period'),
+  "excessMove": zod.number().nullish().describe('stockReturn − sectorReturn. Negative = fell more than sector (company-specific); near zero = moved with sector; positive = outperformed sector.\n'),
+  "moveType": zod.enum(['company_specific', 'market_driven', 'relative_outperformer', 'insufficient_data']).describe('company_specific: excess move ≤ −2% (fell materially more than sector); market_driven: within ±2%\/+1% of sector; relative_outperformer: fell less than sector; insufficient_data: benchmark or price data unavailable.\n'),
+  "cause": zod.object({
+  "dominant": zod.enum(['sector_macro', 'technical_no_news', 'operational_stumble', 'thesis_impairment', 'secular_decline', 'solvency_stress', 'governance_accounting', 'corporate_action', 'unknown']).describe('The single most likely cause category for the drop'),
+  "secondary": zod.array(zod.enum(['sector_macro', 'technical_no_news', 'operational_stumble', 'thesis_impairment', 'secular_decline', 'solvency_stress', 'governance_accounting', 'corporate_action', 'unknown'])).describe('Additional cause categories with weaker evidence'),
+  "signal": zod.enum(['green', 'amber', 'red', 'neutral']).describe('Severity signal for colour coding. green = least concerning (sector move); amber = ambiguous — review warranted; red = likely deterioration — elevated concern; neutral = corporate action (context-dependent).\n')
+}),
+  "confidence": zod.enum(['high', 'medium', 'low']).describe('high = sector move computed AND news keyword match; medium = one of those; low = neither (price-only classification).\n'),
+  "evidenceAvailable": zod.boolean().describe('True when at least one news article was found'),
+  "evidence": zod.array(zod.object({
+  "headline": zod.string().describe('Article headline as displayed in the Recent News feed'),
+  "source": zod.string().describe('News source name'),
+  "url": zod.string().describe('Link to the article'),
+  "published": zod.string().describe('ISO 8601 publish datetime')
+})).describe('News items from the existing feed that support the classification'),
+  "rationale": zod.string().describe('Human-readable explanation of the classification'),
+  "disclaimer": zod.string().describe('Always \"Decision-support signal, not investment advice.\"')
+})
+
+
+/**
  * Returns cheapness and fundamental momentum scores, plus a four-quadrant verdict for each requested ticker. Crypto tickers are ignored. Results are cached for 1 hour per ticker.
  * @summary Get valuation and fundamental verdicts for a batch of stock tickers
  */
@@ -168,9 +205,9 @@ export const GetVerdictsQueryParams = zod.object({
 export const GetVerdictsResponse = zod.object({
   "verdicts": zod.record(zod.string(), zod.union([zod.object({
   "ticker": zod.string(),
-  "verdict": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish(),
+  "verdict": zod.enum(['Undervalued', 'At value', 'Overvalued (adjusted)', 'Overvalued', 'null']).nullish().describe('Final valuation verdict. \"Overvalued (adjusted)\" means the business earns above cost-of-capital (ROIC soft notch) but not strongly enough for a clean \"At value\" upgrade — quality awareness without unqualified upgrade.\n'),
   "verdictBase": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish().describe('Verdict before any modifiers (ROIC, D\/E) were applied'),
-  "verdictAfterRoic": zod.enum(['Undervalued', 'At value', 'Overvalued', 'null']).nullish().describe('Verdict after ROIC modifier, before D\/E modifier. Equals final verdict when D\/E had no effect.'),
+  "verdictAfterRoic": zod.enum(['Undervalued', 'At value', 'Overvalued (adjusted)', 'Overvalued', 'null']).nullish().describe('Verdict after ROIC modifier, before D\/E modifier. Equals final verdict when D\/E had no effect.'),
   "cheapness": zod.object({
   "label": zod.enum(['Cheap', 'Not Cheap']),
   "score": zod.number().describe('Raw cheapness score (positive = cheap)'),
@@ -205,9 +242,10 @@ export const GetVerdictsResponse = zod.object({
   "consensus": zod.string()
 }),zod.null()]).optional(),
   "roic": zod.object({
-  "flag": zod.enum(['strong_positive', 'positive', 'neutral', 'negative', 'strong_negative', 'skipped', 'missing']),
-  "value": zod.number().nullish(),
-  "note": zod.string()
+  "flag": zod.enum(['elite', 'high', 'value_creating', 'marginal', 'value_destroying', 'skipped', 'missing']).describe('ROIC quality tier — one shared definition for display labels and override logic. elite = ≥30% ROIC (full notch upgrade eligible); high = 20–30% (full notch eligible); value_creating = WACC_proxy < ROIC < 20% (soft notch only); marginal = around WACC_proxy (no override); value_destroying = below WACC_proxy − 3pts (no override); skipped = not applicable (Financials); missing = data unavailable.\n'),
+  "value": zod.number().nullish().describe('ROIC as decimal (e.g. 0.16 = 16%). null for skipped\/missing.'),
+  "note": zod.string().describe('Human-readable tier interpretation for the detail view'),
+  "overrideRationale": zod.string().nullish().describe('Generated rationale explaining the ROIC override decision, including the leverage interaction. Set when the modifier ran; null when ROIC is skipped\/missing.\n')
 }).optional(),
   "de": zod.object({
   "flag": zod.enum(['distressed', 'normal', 'elevated', 'high', 'skipped', 'missing']).describe('distressed = negative equity; normal = within sector-typical range; elevated = above normal, below high; high = significantly above norm; skipped = not meaningful for this sector (Financials); missing = data unavailable\n'),

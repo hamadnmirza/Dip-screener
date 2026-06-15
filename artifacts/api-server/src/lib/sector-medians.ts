@@ -264,20 +264,37 @@ export function getDeConfig(finnhubIndustry: string | null | undefined): {
 // ── ROIC configuration ────────────────────────────────────────────────────────
 
 /**
- * ROIC flag thresholds (decimal form, e.g. 0.08 = 8%).
- * Capital-intensive sectors have all non-zero thresholds reduced by CAPITAL_INTENSIVE_REDUCTION.
+ * WACC proxy — a fixed cost-of-capital approximation used as the ROIC hurdle rate.
+ * This is a simplification: actual WACC varies by sector and rate environment.
+ * Label as "proxy" wherever surfaced to the user; do not imply precision.
+ */
+export const WACC_PROXY = 0.09; // ~9%
+
+/**
+ * ROIC tier thresholds (decimal form, e.g. 0.30 = 30%).
+ * One shared definition drives both the display tier label and the override magnitude.
+ * Capital-intensive sectors have non-zero thresholds reduced by CAPITAL_INTENSIVE_REDUCTION.
+ *
+ * Tier       | Condition                          | Override
+ * -----------|------------------------------------|-----------------------------
+ * elite      | ROIC ≥ ELITE_MIN (30%)             | up to 1 full notch
+ * high       | HIGH_MIN (20%) ≤ ROIC < ELITE_MIN  | up to 1 full notch
+ * value_creating | WACC_PROXY < ROIC < HIGH_MIN   | soft notch only
+ * marginal   | (WACC_PROXY − MARGINAL_BUFFER) ≤ ROIC ≤ WACC_PROXY | no override
+ * value_destroying | ROIC < (WACC_PROXY − MARGINAL_BUFFER) | no override
  */
 export const ROIC_THRESHOLDS = {
-  /** ROIC < 0 → "strong_negative" (applies to all sectors unchanged) */
-  STRONG_NEGATIVE_MAX: 0,
-  /** 0 ≤ ROIC < 0.08 → "negative" (below typical WACC) */
-  NEGATIVE_MAX: 0.08,
-  /** 0.08 ≤ ROIC ≤ 0.12 → "neutral" (roughly earning cost of capital) */
-  NEUTRAL_MAX: 0.12,
-  /** 0.12 < ROIC ≤ 0.20 → "positive" (value-creating) */
-  POSITIVE_MAX: 0.20,
-  // ROIC > 0.20 → "strong_positive" (elite, durable moat)
-  /** Reduce all thresholds by this for capital-intensive sectors (lower WACC) */
+  /** ROIC ≥ this → "elite" tier */
+  ELITE_MIN: 0.30,
+  /** ROIC ≥ this and < ELITE_MIN → "high" tier */
+  HIGH_MIN: 0.20,
+  /**
+   * Buffer below WACC_PROXY that defines the "marginal" zone.
+   * ROIC in [WACC_PROXY − MARGINAL_BUFFER, WACC_PROXY] → "marginal".
+   * ROIC < WACC_PROXY − MARGINAL_BUFFER → "value_destroying".
+   */
+  MARGINAL_BUFFER: 0.03,
+  /** Reduce all non-zero thresholds by this for capital-intensive sectors (lower structural WACC). */
   CAPITAL_INTENSIVE_REDUCTION: 0.03,
 };
 
@@ -316,3 +333,6 @@ export function getRoicSectorConfig(finnhubIndustry: string | null | undefined):
     capitalIntensive: ROIC_CAPITAL_INTENSIVE_INDUSTRIES.has(finnhubIndustry),
   };
 }
+
+/** Re-export for convenience — used in drop-classifier and other libs. */
+export { INDUSTRY_TO_SECTOR };

@@ -8,8 +8,20 @@
 import type { RoicResultFlag } from './roicResultFlag';
 
 export interface RoicResult {
+  /** ROIC quality tier — one shared definition for display labels and override logic. elite = ≥30% ROIC (full notch upgrade eligible); high = 20–30% (full notch eligible); value_creating = WACC_proxy < ROIC < 20% (soft notch only); marginal = around WACC_proxy (no override); value_destroying = below WACC_proxy − 3pts (no override); skipped = not applicable (Financials); missing = data unavailable.
+   */
   flag: RoicResultFlag;
-  /** @nullable */
+  /**
+     * ROIC as decimal (e.g. 0.16 = 16%). null for skipped/missing.
+     * @nullable
+     */
   value?: number | null;
+  /** Human-readable tier interpretation for the detail view */
   note: string;
+  /**
+     * Generated rationale explaining the ROIC override decision, including the leverage interaction. Set when the modifier ran; null when ROIC is skipped/missing.
+
+     * @nullable
+     */
+  overrideRationale?: string | null;
 }

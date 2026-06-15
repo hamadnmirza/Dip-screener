@@ -260,24 +260,40 @@ export interface AnalystCounts {
   consensus: string;
 }
 
+/**
+ * ROIC quality tier — one shared definition for display labels and override logic. elite = ≥30% ROIC (full notch upgrade eligible); high = 20–30% (full notch eligible); value_creating = WACC_proxy < ROIC < 20% (soft notch only); marginal = around WACC_proxy (no override); value_destroying = below WACC_proxy − 3pts (no override); skipped = not applicable (Financials); missing = data unavailable.
+
+ */
 export type RoicResultFlag = typeof RoicResultFlag[keyof typeof RoicResultFlag];
 
 
 export const RoicResultFlag = {
-  strong_positive: 'strong_positive',
-  positive: 'positive',
-  neutral: 'neutral',
-  negative: 'negative',
-  strong_negative: 'strong_negative',
+  elite: 'elite',
+  high: 'high',
+  value_creating: 'value_creating',
+  marginal: 'marginal',
+  value_destroying: 'value_destroying',
   skipped: 'skipped',
   missing: 'missing',
 } as const;
 
 export interface RoicResult {
+  /** ROIC quality tier — one shared definition for display labels and override logic. elite = ≥30% ROIC (full notch upgrade eligible); high = 20–30% (full notch eligible); value_creating = WACC_proxy < ROIC < 20% (soft notch only); marginal = around WACC_proxy (no override); value_destroying = below WACC_proxy − 3pts (no override); skipped = not applicable (Financials); missing = data unavailable.
+   */
   flag: RoicResultFlag;
-  /** @nullable */
+  /**
+     * ROIC as decimal (e.g. 0.16 = 16%). null for skipped/missing.
+     * @nullable
+     */
   value?: number | null;
+  /** Human-readable tier interpretation for the detail view */
   note: string;
+  /**
+     * Generated rationale explaining the ROIC override decision, including the leverage interaction. Set when the modifier ran; null when ROIC is skipped/missing.
+
+     * @nullable
+     */
+  overrideRationale?: string | null;
 }
 
 export interface DeBand {
@@ -321,6 +337,8 @@ export interface DeResult {
 }
 
 /**
+ * Final valuation verdict. "Overvalued (adjusted)" means the business earns above cost-of-capital (ROIC soft notch) but not strongly enough for a clean "At value" upgrade — quality awareness without unqualified upgrade.
+
  * @nullable
  */
 export type TickerVerdictVerdict = typeof TickerVerdictVerdict[keyof typeof TickerVerdictVerdict] | null;
@@ -329,6 +347,7 @@ export type TickerVerdictVerdict = typeof TickerVerdictVerdict[keyof typeof Tick
 export const TickerVerdictVerdict = {
   Undervalued: 'Undervalued',
   At_value: 'At value',
+  'Overvalued_(adjusted)': 'Overvalued (adjusted)',
   Overvalued: 'Overvalued',
   null: 'null',
 } as const;
@@ -357,13 +376,18 @@ export type TickerVerdictVerdictAfterRoic = typeof TickerVerdictVerdictAfterRoic
 export const TickerVerdictVerdictAfterRoic = {
   Undervalued: 'Undervalued',
   At_value: 'At value',
+  'Overvalued_(adjusted)': 'Overvalued (adjusted)',
   Overvalued: 'Overvalued',
   null: 'null',
 } as const;
 
 export interface TickerVerdict {
   ticker: string;
-  /** @nullable */
+  /**
+     * Final valuation verdict. "Overvalued (adjusted)" means the business earns above cost-of-capital (ROIC soft notch) but not strongly enough for a clean "At value" upgrade — quality awareness without unqualified upgrade.
+
+     * @nullable
+     */
   verdict?: TickerVerdictVerdict;
   /**
      * Verdict before any modifiers (ROIC, D/E) were applied
@@ -390,6 +414,151 @@ export type VerdictsResponseVerdicts = {[key: string]: TickerVerdict | null};
 
 export interface VerdictsResponse {
   verdicts: VerdictsResponseVerdicts;
+}
+
+export interface DropEvidence {
+  /** Article headline as displayed in the Recent News feed */
+  headline: string;
+  /** News source name */
+  source: string;
+  /** Link to the article */
+  url: string;
+  /** ISO 8601 publish datetime */
+  published: string;
+}
+
+/**
+ * The single most likely cause category for the drop
+ */
+export type DropCauseDominant = typeof DropCauseDominant[keyof typeof DropCauseDominant];
+
+
+export const DropCauseDominant = {
+  sector_macro: 'sector_macro',
+  technical_no_news: 'technical_no_news',
+  operational_stumble: 'operational_stumble',
+  thesis_impairment: 'thesis_impairment',
+  secular_decline: 'secular_decline',
+  solvency_stress: 'solvency_stress',
+  governance_accounting: 'governance_accounting',
+  corporate_action: 'corporate_action',
+  unknown: 'unknown',
+} as const;
+
+export type DropCauseSecondaryItem = typeof DropCauseSecondaryItem[keyof typeof DropCauseSecondaryItem];
+
+
+export const DropCauseSecondaryItem = {
+  sector_macro: 'sector_macro',
+  technical_no_news: 'technical_no_news',
+  operational_stumble: 'operational_stumble',
+  thesis_impairment: 'thesis_impairment',
+  secular_decline: 'secular_decline',
+  solvency_stress: 'solvency_stress',
+  governance_accounting: 'governance_accounting',
+  corporate_action: 'corporate_action',
+  unknown: 'unknown',
+} as const;
+
+/**
+ * Severity signal for colour coding. green = least concerning (sector move); amber = ambiguous — review warranted; red = likely deterioration — elevated concern; neutral = corporate action (context-dependent).
+
+ */
+export type DropCauseSignal = typeof DropCauseSignal[keyof typeof DropCauseSignal];
+
+
+export const DropCauseSignal = {
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  neutral: 'neutral',
+} as const;
+
+export interface DropCause {
+  /** The single most likely cause category for the drop */
+  dominant: DropCauseDominant;
+  /** Additional cause categories with weaker evidence */
+  secondary: DropCauseSecondaryItem[];
+  /** Severity signal for colour coding. green = least concerning (sector move); amber = ambiguous — review warranted; red = likely deterioration — elevated concern; neutral = corporate action (context-dependent).
+   */
+  signal: DropCauseSignal;
+}
+
+export type DropClassificationPeriod = typeof DropClassificationPeriod[keyof typeof DropClassificationPeriod];
+
+
+export const DropClassificationPeriod = {
+  '1h': '1h',
+  '24h': '24h',
+  '1w': '1w',
+  '1m': '1m',
+} as const;
+
+/**
+ * company_specific: excess move ≤ −2% (fell materially more than sector); market_driven: within ±2%/+1% of sector; relative_outperformer: fell less than sector; insufficient_data: benchmark or price data unavailable.
+
+ */
+export type DropClassificationMoveType = typeof DropClassificationMoveType[keyof typeof DropClassificationMoveType];
+
+
+export const DropClassificationMoveType = {
+  company_specific: 'company_specific',
+  market_driven: 'market_driven',
+  relative_outperformer: 'relative_outperformer',
+  insufficient_data: 'insufficient_data',
+} as const;
+
+/**
+ * high = sector move computed AND news keyword match; medium = one of those; low = neither (price-only classification).
+
+ */
+export type DropClassificationConfidence = typeof DropClassificationConfidence[keyof typeof DropClassificationConfidence];
+
+
+export const DropClassificationConfidence = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+} as const;
+
+export interface DropClassification {
+  ticker: string;
+  /** ISO 8601 timestamp when classification was computed */
+  asOf: string;
+  period: DropClassificationPeriod;
+  /**
+     * Ticker's percent change over the period (negative = drop)
+     * @nullable
+     */
+  stockReturn?: number | null;
+  /** ETF ticker used as sector benchmark (e.g. XLK, EWU, SPY) */
+  sectorBenchmark: string;
+  /**
+     * Benchmark ETF percent change over the same period
+     * @nullable
+     */
+  sectorReturn?: number | null;
+  /**
+     * stockReturn − sectorReturn. Negative = fell more than sector (company-specific); near zero = moved with sector; positive = outperformed sector.
+
+     * @nullable
+     */
+  excessMove?: number | null;
+  /** company_specific: excess move ≤ −2% (fell materially more than sector); market_driven: within ±2%/+1% of sector; relative_outperformer: fell less than sector; insufficient_data: benchmark or price data unavailable.
+   */
+  moveType: DropClassificationMoveType;
+  cause: DropCause;
+  /** high = sector move computed AND news keyword match; medium = one of those; low = neither (price-only classification).
+   */
+  confidence: DropClassificationConfidence;
+  /** True when at least one news article was found */
+  evidenceAvailable: boolean;
+  /** News items from the existing feed that support the classification */
+  evidence: DropEvidence[];
+  /** Human-readable explanation of the classification */
+  rationale: string;
+  /** Always "Decision-support signal, not investment advice." */
+  disclaimer: string;
 }
 
 export type GetSecuritiesByTickersParams = {
@@ -500,6 +669,27 @@ export type GetTopMoversAssetType = typeof GetTopMoversAssetType[keyof typeof Ge
 export const GetTopMoversAssetType = {
   equity: 'equity',
   crypto: 'crypto',
+} as const;
+
+export type GetDropCauseParams = {
+/**
+ * Stock ticker symbol (e.g. AAPL, AZN)
+ */
+ticker: string;
+/**
+ * Time period matching the scanner selection (default: 24h)
+ */
+period?: GetDropCausePeriod;
+};
+
+export type GetDropCausePeriod = typeof GetDropCausePeriod[keyof typeof GetDropCausePeriod];
+
+
+export const GetDropCausePeriod = {
+  '1h': '1h',
+  '24h': '24h',
+  '1w': '1w',
+  '1m': '1m',
 } as const;
 
 export type GetVerdictsParams = {

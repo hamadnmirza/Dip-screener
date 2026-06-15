@@ -277,6 +277,11 @@ export async function fetchAllSecurities(period: TimePeriod): Promise<SecurityDa
   return results;
 }
 
+/** Returns the market classification for a tracked equity ticker, or null for unknowns/crypto */
+export function getTickerMarket(ticker: string): Market | null {
+  return EQUITY_META[ticker]?.market ?? null;
+}
+
 export function getDropRange(percentChange: number): DropRange {
   const abs = Math.abs(percentChange);
   if (abs <= 10) return "up_to_10";

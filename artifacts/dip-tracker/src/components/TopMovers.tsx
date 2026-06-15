@@ -4,14 +4,33 @@ import {
   getGetTopMoversQueryKey,
   useGetVerdicts,
   getGetVerdictsQueryKey,
+  useGetDropCause,
+  getGetDropCauseQueryKey,
 } from "@workspace/api-client-react";
-import type { GetTopMoversParams } from "@workspace/api-client-react";
+import type { GetTopMoversParams, GetDropCausePeriod } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { VerdictBadge } from "./VerdictBadge";
+import { DropCauseBadge } from "./DropCauseBadge";
 
 interface TopMoversProps {
   params: GetTopMoversParams;
+}
+
+function DropCausePill({
+  ticker,
+  period,
+}: {
+  ticker: string;
+  period: GetDropCausePeriod;
+}) {
+  const { data, isLoading } = useGetDropCause(
+    { ticker, period },
+    { query: { queryKey: getGetDropCauseQueryKey({ ticker, period }) } }
+  );
+  if (isLoading) return <Skeleton className="h-4 w-16 bg-muted/20" />;
+  if (!data) return null;
+  return <DropCauseBadge classification={data} size="xs" />;
 }
 
 export function TopMovers({ params }: TopMoversProps) {
@@ -37,6 +56,7 @@ export function TopMovers({ params }: TopMoversProps) {
   );
 
   const verdictMap = verdictsData?.verdicts ?? {};
+  const period = (params.timePeriod ?? "24h") as GetDropCausePeriod;
 
   if (isLoading) {
     return (
@@ -87,13 +107,16 @@ export function TopMovers({ params }: TopMoversProps) {
                     {formatPercent(mover.percentChange)}
                   </span>
                 </div>
-                {/* Verdict badge for equity cards */}
+                {/* Verdict + cause badges for equity cards */}
                 {isEquity && (
-                  <div className="mt-1">
+                  <div className="mt-1 flex flex-wrap gap-1 items-center">
                     {verdictsLoading ? (
                       <Skeleton className="h-4 w-24 bg-muted/30" />
                     ) : (
-                      <VerdictBadge verdict={tickerVerdict?.verdict ?? null} size="sm" />
+                      <>
+                        <VerdictBadge verdict={tickerVerdict?.verdict ?? null} size="sm" />
+                        <DropCausePill ticker={mover.ticker} period={period} />
+                      </>
                     )}
                   </div>
                 )}

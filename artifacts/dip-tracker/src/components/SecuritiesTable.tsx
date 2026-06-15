@@ -4,24 +4,67 @@ import {
   getListSecuritiesQueryKey,
   useGetVerdicts,
   getGetVerdictsQueryKey,
+  useGetDropCause,
+  getGetDropCauseQueryKey,
+  getDropCause,
 } from "@workspace/api-client-react";
-import type { ListSecuritiesParams } from "@workspace/api-client-react";
+import type {
+  ListSecuritiesParams,
+  GetDropCausePeriod,
+} from "@workspace/api-client-react";
+import { useQueries } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { VerdictBadge } from "./VerdictBadge";
 import { VerdictDetail } from "./VerdictDetail";
 import { StarButton } from "./StarButton";
+import { DropCauseBadge } from "./DropCauseBadge";
+
+// ── Cause filter type ─────────────────────────────────────────────────────────
+
+export type CauseMoveFilter =
+  | "all"
+  | "company_specific"
+  | "market_driven"
+  | "relative_outperformer";
+
+// ── Per-row cause badge ───────────────────────────────────────────────────────
+
+function DropCauseCell({
+  ticker,
+  period,
+}: {
+  ticker: string;
+  period: GetDropCausePeriod;
+}) {
+  const { data, isLoading } = useGetDropCause(
+    { ticker, period },
+    { query: { queryKey: getGetDropCauseQueryKey({ ticker, period }) } }
+  );
+
+  if (isLoading) return <Skeleton className="h-4 w-16 bg-muted/20" />;
+  if (!data) return null;
+  return <DropCauseBadge classification={data} size="xs" />;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 interface SecuritiesTableProps {
   params: ListSecuritiesParams;
   isWatched: (ticker: string) => boolean;
   onToggleWatch: (ticker: string) => void;
+  causeFilter?: CauseMoveFilter;
 }
 
 const COL_COUNT = 7;
 
-export function SecuritiesTable({ params, isWatched, onToggleWatch }: SecuritiesTableProps) {
+export function SecuritiesTable({
+  params,
+  isWatched,
+  onToggleWatch,
+  causeFilter = "all",
+}: SecuritiesTableProps) {
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useListSecurities(params, {
@@ -47,12 +90,35 @@ export function SecuritiesTable({ params, isWatched, onToggleWatch }: Securities
 
   const verdictMap = verdictsData?.verdicts ?? {};
 
+  // Batch-fetch classifications when cause filter is active
+  const filterActive = causeFilter !== "all";
+  const period = (params.timePeriod ?? "24h") as GetDropCausePeriod;
+
+  const causeQueryResults = useQueries({
+    queries: filterActive
+      ? equityTickers.map((ticker) => ({
+          queryKey: getGetDropCauseQueryKey({ ticker, period }),
+          queryFn: () => getDropCause({ ticker, period }),
+          staleTime: 15 * 60 * 1000,
+        }))
+      : [],
+  });
+
+  const causeMap: Record<string, string | undefined> = filterActive
+    ? Object.fromEntries(
+        equityTickers.map((ticker, i) => [
+          ticker,
+          causeQueryResults[i]?.data?.moveType,
+        ])
+      )
+    : {};
+
   function handleRowClick(ticker: string, isEquity: boolean) {
     if (!isEquity) return;
     setExpandedTicker((prev) => (prev === ticker ? null : ticker));
   }
 
-  // ── Loading skeleton ──────────────────────────────────────────────────────
+  // ── Loading skeleton ────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="border border-border rounded-md overflow-hidden bg-card">
@@ -86,7 +152,7 @@ export function SecuritiesTable({ params, isWatched, onToggleWatch }: Securities
     );
   }
 
-  // ── Error ─────────────────────────────────────────────────────────────────
+  // ── Error ───────────────────────────────────────────────────────────────────
   if (isError) {
     return (
       <div className="p-8 text-center border border-border rounded-md bg-card">
@@ -95,7 +161,7 @@ export function SecuritiesTable({ params, isWatched, onToggleWatch }: Securities
     );
   }
 
-  // ── Empty state ───────────────────────────────────────────────────────────
+  // ── Empty state ─────────────────────────────────────────────────────────────
   if (!data || data.securities.length === 0) {
     return (
       <div
@@ -123,6 +189,16 @@ export function SecuritiesTable({ params, isWatched, onToggleWatch }: Securities
     (a, b) => a.percentChange - b.percentChange
   );
 
+  // Apply cause filter (only hides rows where data loaded AND doesn't match)
+  const filteredSecurities = filterActive
+    ? sortedSecurities.filter((security) => {
+        if (security.assetType !== "equity") return false;
+        const moveType = causeMap[security.ticker];
+        if (moveType === undefined) return true; // still loading — keep visible
+        return moveType === causeFilter;
+      })
+    : sortedSecurities;
+
   return (
     <div
       className="border border-border rounded-md overflow-hidden bg-card shadow-sm"
@@ -148,12 +224,12 @@ export function SecuritiesTable({ params, isWatched, onToggleWatch }: Securities
               Drop %
             </TableHead>
             <TableHead className="font-semibold text-muted-foreground uppercase text-xs tracking-wider text-right">
-              Verdict
+              Verdict / Cause
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedSecurities.map((security) => {
+          {filteredSecurities.map((security) => {
             const isEquity = security.assetType === "equity";
             const isExpanded = expandedTicker === security.ticker;
             const tickerVerdict = isEquity ? verdictMap[security.ticker] : undefined;
@@ -205,9 +281,16 @@ export function SecuritiesTable({ params, isWatched, onToggleWatch }: Securities
                     {!isEquity ? (
                       <span className="text-muted-foreground/40">—</span>
                     ) : verdictsLoading ? (
-                      <Skeleton className="h-5 w-24 ml-auto" />
+                      <div className="flex flex-col items-end gap-1">
+                        <Skeleton className="h-5 w-24" />
+                      </div>
                     ) : (
-                      <VerdictBadge verdict={tickerVerdict?.verdict ?? null} size="sm" />
+                      <div className="flex flex-col items-end gap-1">
+                        <VerdictBadge verdict={tickerVerdict?.verdict ?? null} size="sm" />
+                        {!filterActive && (
+                          <DropCauseCell ticker={security.ticker} period={period} />
+                        )}
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -220,6 +303,7 @@ export function SecuritiesTable({ params, isWatched, onToggleWatch }: Securities
                         data={tickerVerdict ?? null}
                         loading={verdictsLoading}
                         currentPrice={security.currentPrice}
+                        period={period}
                       />
                     </TableCell>
                   </TableRow>

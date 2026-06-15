@@ -74,18 +74,27 @@ async function computeTickerVerdict(ticker: string): Promise<VerdictResult | nul
     // Base verdict from cheapness alone
     const verdictBase = computeVerdict(cheapness, fundamentals);
 
-    // ROIC quality modifier — roiTtm from Finnhub is percent (e.g. 26.33), convert to decimal
+    // D/E leverage (compute before ROIC modifier — D/E is passed to applyRoicModifier
+    // so the leverage gate is applied inside the ROIC step, not separately).
+    const de = computeDeFlag(valuation.deRatio, valuation.sector);
+
+    // ROIC quality modifier — tiered + leverage-aware.
+    // roiTtm from Finnhub is percent form (e.g. 26.33 = 26.33%), convert to decimal.
     const roicDecimal = valuation.roiTtm !== null ? valuation.roiTtm / 100 : null;
     const roic = computeRoicFlag(roicDecimal, valuation.sector);
     const roicMod = verdictBase !== null
-      ? applyRoicModifier(verdictBase, roic)
+      ? applyRoicModifier(verdictBase, roic, de)
       : { verdict: verdictBase as never, shifted: false };
+
+    // Attach the override rationale to the roic result for the frontend
+    if (roicMod.rationale) {
+      roic.overrideRationale = roicMod.rationale;
+    }
 
     const verdictAfterRoic = verdictBase !== null ? roicMod.verdict : null;
 
-    // D/E leverage modifier (stocks only; crypto falls through as "missing")
-    // debtToEbitda: not available from Finnhub metric call; pass null → elevated gate skipped
-    const de = computeDeFlag(valuation.deRatio, valuation.sector);
+    // D/E leverage modifier — runs AFTER ROIC.
+    // debtToEbitda: not available from Finnhub metric call; pass null → elevated gate skipped.
     const deMod = verdictAfterRoic !== null
       ? applyDeModifier(verdictAfterRoic, de, null)
       : { verdict: verdictAfterRoic as never, shifted: false };

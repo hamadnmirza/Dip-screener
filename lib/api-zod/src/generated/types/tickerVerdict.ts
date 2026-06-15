@@ -17,7 +17,11 @@ import type { TickerVerdictVerdictBase } from './tickerVerdictVerdictBase';
 
 export interface TickerVerdict {
   ticker: string;
-  /** @nullable */
+  /**
+     * Final valuation verdict. "Overvalued (adjusted)" means the business earns above cost-of-capital (ROIC soft notch) but not strongly enough for a clean "At value" upgrade — quality awareness without unqualified upgrade.
+
+     * @nullable
+     */
   verdict?: TickerVerdictVerdict;
   /**
      * Verdict before any modifiers (ROIC, D/E) were applied
