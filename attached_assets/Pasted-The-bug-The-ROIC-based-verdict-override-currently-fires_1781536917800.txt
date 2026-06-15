@@ -1,0 +1,94 @@
+The bug
+
+The ROIC-based verdict override currently fires identically for very different businesses. Observed in the live app:
+
+
+LLY: ROIC 38% (tier label "Elite"), D/E 1.39× ("Elevated") → verdict upgraded "Overvalued" → "At value"
+AZN: ROIC 13% (tier label "Value-Creating"), D/E 0.72× ("Normal") → same upgrade, identical wording
+
+
+A 38% ROIC and a 13% ROIC produce the same override. That's wrong on two counts:
+
+
+The override ignores the quality tier it displays. The app computes tier labels (Elite / Value-Creating / etc.) for display, but the override magnitude doesn't use them — it appears to be a binary gate ("ROIC clears cost of capital → upgrade one notch"), so any ROIC above a low bar gets the full upgrade. A 13% ROIC is genuinely good, but it should not earn the same valuation forgiveness as a 38% one.
+The override ignores leverage. LLY was upgraded despite elevated leverage (1.39×). High ROIC financed partly by debt is lower-quality than the same ROIC on a clean balance sheet. The override must be more conservative when D/E is elevated, because debt-inflated returns are exactly the trap a dip-screener should not wave through.
+
+
+Net effect: the override is too generous and too uniform. It risks upgrading mediocre or debt-heavy names into "At value," which undermines the tool's credibility for a discerning user.
+
+
+The fix: make the override tiered and leverage-aware
+
+Replace the binary gate with a rule where (a) the size of the override scales with the ROIC tier, and (b) elevated leverage reduces or blocks the upgrade.
+
+Step 1 — Define ROIC tiers explicitly (single source of truth)
+
+Use ONE tier definition for both the display label and the override logic — they must not drift apart. Suggested thresholds (expose as config constants; these are starting values):
+
+Tier labelROIC (TTM) conditionMeaningeliteROIC ≥ 30%Exceptional, durable moathigh20% ≤ ROIC < 30%Strong returnsvalue_creatingWACC_proxy < ROIC < 20%Above cost of capital, creating valuemarginal(WACC_proxy − 3pts) ≤ ROIC ≤ WACC_proxyAround cost of capitalvalue_destroyingROIC < (WACC_proxy − 3pts)Below cost of capital
+
+WACC_proxy: if you don't compute WACC, use a fixed proxy (e.g. 9–10%) as a config constant, and label it as such in the lineage note. Don't imply precision you don't have.
+
+Step 2 — Map tier to a maximum override magnitude
+
+The override can lift the valuation verdict by at most the amount its quality tier earns:
+
+TierMax upgrade allowedeliteup to 1 full notch (e.g. Overvalued → At value)highup to 1 full notchvalue_creatinghalf/soft notch only — e.g. Overvalued → "Overvalued (quality-adjusted)" or a "watch" state, NOT a clean flip to At valuemarginalno overridevalue_destroyingno override (and consider a downgrade flag)
+
+This is the core fix: AZN at 13% ROIC (value_creating) should get at most a soft adjustment, not the same clean "At value" flip LLY (elite) gets. The two must visibly differ.
+
+Step 3 — Apply a leverage gate
+
+After Step 2, modify by leverage (reuse the existing D/E sector-norm classification — Normal / Elevated / High):
+
+Leverage stateEffect on the overridenormal (within sector norm)full override from Step 2 applieselevatedreduce the override by one level (a 1-notch upgrade becomes a soft/half notch; a soft notch becomes none)high (well above sector norm)block the override entirely; show a leverage caution
+
+Rationale to surface to the user: returns financed by above-normal leverage are lower quality and more fragile in a drawdown. LLY's 1.39× ("Elevated") means even at 38% ROIC its clean 1-notch upgrade should be tempered — likely to a soft notch, not the unqualified "At value" it currently shows.
+
+Step 4 — Make the rationale text reflect the actual inputs
+
+The current override prints near-identical wording for both names. Generate the rationale from the real tier + leverage, so two different names read differently. Examples (generate, don't hardcode):
+
+
+LLY: "ROIC 38% (elite) supports a valuation upgrade, tempered to a soft adjustment by elevated leverage (D/E 1.39× vs ~0.8× sector norm)."
+AZN: "ROIC 13% (value-creating, above ~9% cost-of-capital proxy) earns a soft quality adjustment, not a full upgrade; clean balance sheet (D/E 0.72×) imposes no additional caution."
+
+
+
+Output contract
+
+The override result should expose its full reasoning (consistent with the app's existing traceable-override style):
+
+json{
+  "ticker": "AZN",
+  "roic_ttm": 13.0,
+  "roic_tier": "value_creating",
+  "wacc_proxy": 9.0,
+  "de_ratio": 0.72,
+  "leverage_state": "normal",
+  "base_verdict": "Overvalued",
+  "max_upgrade_from_tier": "soft_notch",
+  "leverage_adjustment": "none",
+  "final_override": "soft_notch",
+  "final_verdict": "Overvalued (quality-adjusted)",
+  "rationale": "ROIC 13% (value-creating, above ~9% cost-of-capital proxy) earns a soft quality adjustment, not a full upgrade; clean balance sheet imposes no additional caution.",
+  "disclaimer": "Decision-support signal, not investment advice."
+}
+
+
+Acceptance criteria
+
+
+ One shared tier definition drives both the display label and the override magnitude.
+ A value_creating (e.g. 13%) name and an elite (e.g. 38%) name produce visibly different override outcomes — not identical wording or identical verdict flips.
+ Elevated leverage demonstrably reduces the override; high leverage blocks it.
+ Re-running on current data: LLY's upgrade is tempered by its 1.39× leverage (no longer a clean unqualified flip); AZN gets a soft adjustment, not a full "At value."
+ Rationale text is generated from real inputs and differs per name.
+ WACC_proxy is labelled as a proxy in the lineage note; thresholds are config constants.
+ Nothing phrased as buy/sell advice; disclaimer present.
+
+
+
+Note / caveat for the developer
+
+These thresholds (30%/20% tiers, ~9% WACC proxy, the notch-mapping) are reasonable defaults, not gospel — calibrate them against names where you already have a view, and adjust. The structural fix (tiered + leverage-aware + shared definition) matters more than the exact numbers. WACC varies by sector and rate environment; a single fixed proxy is a simplification you should revisit if the tool ever needs sector-specific cost of capital.

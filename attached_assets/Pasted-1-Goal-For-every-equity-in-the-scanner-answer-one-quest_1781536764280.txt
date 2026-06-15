@@ -1,0 +1,157 @@
+1. Goal
+
+For every equity in the scanner, answer one question: why is it down? The expanded row already shows a drop %, a Cheapness/Fundamentals/Quality/Leverage verdict, a "Recent News" feed, and analyst spreads — but nothing explains the cause of the price move. Two stocks both down ~2% (e.g. AZN −2.07% and MRK −2.02% in the current scanner) look identical in the table but can mean opposite things — one fell with its sector, the other on company-specific news. This feature classifies the cause and surfaces it.
+
+This feature extends the existing app — it does not rebuild existing components. Specifically, it reuses what's already there (see §2.1) rather than duplicating it.
+
+This is a decision-support signal for the user's own judgement. It is not investment advice and must never be labelled or phrased as a buy/sell recommendation.
+
+2.1 What the app ALREADY has — reuse, do not rebuild
+
+The expanded scanner row already renders these components. The classifier must integrate with them, not replace or duplicate them:
+
+
+"Recent News" feed — already pulls ~3 recent items per ticker with source name, age, and an "Open" link (e.g. Yahoo, SeekingAlpha, Benzinga). Use this existing feed as the classifier's evidence source. Do NOT build a separate news provider — read from whatever already populates this panel.
+ROIC-shift verdict box — the app already shows traceable verdict overrides (e.g. "ROIC shifted verdict: 'Overvalued' → 'At value'") in a bordered callout box. The drop-cause output must match this exact visual + explanatory pattern — it is the established house style for showing why a verdict changed.
+Four-panel metric grid — Cheapness / Fundamentals / Quality (ROIC) / Leverage (D/E), each with sector-norm comparisons. The "Why it dropped" panel must fit into this existing grid layout, styled identically.
+Data-lineage labels — the app already shows source/availability notes ("Sector medians from Finnhub industry classification"; "Data unavailable: EPS estimate revisions"). Match this pattern for every new number.
+Verdict badges — "At value" (blue) / "Overvalued" (amber) styling already exists. Reuse the same badge component and colour tokens for the new cause badge.
+
+
+
+2. What to build (high level)
+
+Add a classifyDrop(ticker) function/service that:
+
+
+Computes a sector-relative (excess) move — strip out the market/sector component so the company-specific drop is isolated.
+Pulls recent news/events for the ticker (last 7 days, configurable).
+Maps the evidence to one dominant cause category (taxonomy in §4) plus optional secondary tags.
+Returns a confidence level and the evidence behind the classification.
+Renders the result on the card and the expanded scanner row.
+
+
+Build it to degrade gracefully: if the news source isn't connected yet, still return a classification from price/sector data alone, with confidence: "low" and evidence_available: false. The feature must be shippable before the news API is wired up.
+
+
+3. Step 1 — Sector-relative move (do this first, it gates everything)
+
+Raw drop % is misleading. A −2% move while the sector is −4% is relative strength. Before classifying, compute:
+
+excess_move = stock_return_period − sector_benchmark_return_period
+
+
+stock_return_period: the stock's return over the selected time window (24h / 1w / etc. — reuse the existing period selector).
+sector_benchmark_return_period: return over the same window for the stock's sector ETF or index. Map each stock to a benchmark via its sector classification (you already pull sector data from Finnhub). Suggested fallbacks: sector ETF (e.g. XLK for tech, XLV for health care, XLF for financials) → broad index (S&P 500 / FTSE 100) if no sector match.
+
+
+Derive a move_type field:
+
+Conditionmove_typeexcess_move ≤ −2% (stock fell materially more than sector)company_specific−2% < excess_move < +1% (moved roughly with sector)market_drivenexcess_move ≥ +1% (fell less than sector, or rose vs falling sector)relative_outperformer
+
+Thresholds are starting values — expose them as config constants so they can be tuned. relative_outperformer is important: it tells the user the "dip" is actually relative strength and probably not a company-specific concern.
+
+
+4. Step 2 — Cause taxonomy
+
+Classify each name into exactly one dominant category below (plus optional secondary tags). These map to severity for the user — note the signal column drives colour/badge styling (green = likely dislocation, amber = depends, red = likely deterioration).
+
+CategoryTrigger evidencesignalsector_macromove_type = market_driven; or news dominated by macro/rates/sector themes, nothing company-specificgreen (least concerning)technical_no_newsmove_type = company_specific BUT no material news found; possible flows/technicalamber (ambiguous — flag for review)operational_stumbleearnings miss, one-off charge, guidance cut on transient factors, management changeamberthesis_impairmentmoat erosion, product disruption, lost pricing power, permanent regulatory shiftredsecular_declineend-market shrinking structurally (not cyclical)redsolvency_stressleverage/refinancing/covenant/dilution concerns, credit downgradered (high severity)governance_accountingrestatement, auditor/CFO change, investigation, fraud allegation, insider-selling clusterred (treat as disqualifying until cleared)corporate_actionM&A, spin-off, separation, large buyback/dividend change driving the moveneutral (context-dependent — see note)
+
+Notes for the agent:
+
+
+A name can carry secondary tags, but always pick one dominant category for the headline badge.
+corporate_action is deliberately neutral: a structural change (e.g. a spin-off) isn't good or bad per se but materially changes what's being valued — surface it prominently so the user knows the entity is changing. (This category exists because the framework previously missed pending structural changes; it's a deliberate addition.)
+When evidence is thin or conflicting, prefer the more cautious classification and lower the confidence — the cost of missing a real opportunity is far smaller than the cost of mislabelling a deteriorating business as a dip.
+
+
+
+5. Step 3 — Confidence
+
+Return a confidence field: high / medium / low.
+
+
+high: sector-relative move computed AND ≥1 clear, recent, material news item supports the category.
+medium: either price/sector signal is clear but news is ambiguous, OR news is clear but sector benchmark was unavailable.
+low: no news available (classification from price/sector only), or conflicting evidence.
+
+
+Never present a low-confidence classification with the same visual weight as a high one. Show the confidence on the card.
+
+
+6. Output contract (JSON)
+
+classifyDrop(ticker) returns:
+
+json{
+  "ticker": "AZN",
+  "as_of": "2026-06-15T16:05:00Z",
+  "period": "24h",
+  "stock_return": -2.07,
+  "sector_benchmark": "FTSE 100",
+  "sector_return": -0.4,
+  "excess_move": -1.67,
+  "move_type": "company_specific",
+  "cause": {
+    "dominant": "operational_stumble",
+    "secondary": [],
+    "signal": "amber"
+  },
+  "confidence": "medium",
+  "evidence_available": true,
+  "evidence": [
+    {
+      "headline": "<short paraphrased summary — do NOT store full article text>",
+      "source": "<source name>",
+      "url": "<link>",
+      "published": "2026-06-14T09:00:00Z"
+    }
+  ],
+  "rationale": "Fell ~1.7% more than the FTSE 100 over 24h; coverage centres on a trial-readout setback rather than a broad market move.",
+  "disclaimer": "Decision-support signal, not investment advice."
+}
+
+Important on news content: the evidence array should reference the items already in the Recent News feed (headline as already displayed + existing source + existing link) rather than fetching or storing new article text. The app already shows headlines + links, so no new content is introduced. Do not store or display full article body text or long verbatim quotes anywhere. If you later change the news source, verify the provider's licence permits displaying headlines/links to professional users — most (Finnhub included) restrict redistribution by tier.
+
+
+7. Data sources & wiring
+
+
+Sector benchmark returns: reuse your existing market-data provider (the one already supplying current price and drop %); add ETF/index symbols. If your tier lacks index data, approximate with a liquid sector ETF.
+News/events: REUSE THE EXISTING "Recent News" FEED. The app already fetches recent news per ticker (the panel showing Yahoo/SeekingAlpha/Benzinga items with Open links). The classifier reads from this same data — do not add a second news integration. Wrap whatever currently populates that panel behind a getRecentNews(ticker) accessor so the classifier and the UI panel share one source. If that feed is empty for a ticker, classifier returns evidence_available: false and proceeds on price/sector only.
+Classification logic: implement as deterministic rules first (keyword/event-type matching of the existing news headlines against the taxonomy in §4). Do NOT lead with an LLM call — rules are auditable, free, and fast, and match the already-established traceable-override pattern (the ROIC-shift box). An LLM can be added later as an optional secondary pass for ambiguous cases, but the rule layer must stand alone and every classification must remain explainable.
+
+
+
+8. UI changes — integrate with existing layout
+
+
+Scanner table rows (collapsed): add a compact cause badge in (or just beside) the existing VERDICT column, using the same badge component as "At value"/"Overvalued". This is the headline win — the table currently shows DROP % with no cause, so AZN −2.07% and MRK −2.02% are indistinguishable. Colour by signal (green/amber/red per §4).
+Expanded row — add a "Why It Dropped" panel as a new column in the existing four-panel grid (Cheapness / Fundamentals / Quality / Leverage), styled identically. Show: move_type, excess_move vs named benchmark, dominant cause, confidence. Keep the same label/value typography and the same sector-norm comparison style already used in the Leverage panel.
+Reuse the ROIC-shift callout pattern for the rationale. The app already has a bordered callout box for traceable verdict logic ("ROIC shifted verdict: 'Overvalued' → 'At value'"). Render the drop rationale in the same box style — e.g. "Fell 1.7% more than FTSE 100; news centres on a trial setback, not a market move." This keeps one consistent visual language for "here's why."
+Link evidence to the existing Recent News feed. Don't duplicate news items. Instead, in the "Why It Dropped" panel, reference/highlight which of the already-displayed Recent News items drove the classification (e.g. a small "← basis" marker on the relevant headline). The news panel stays where it is.
+Top Mover cards: add the same small cause badge + a confidence dot under the existing "At value/Overvalued" tag.
+New filter: add a "Cause" dropdown to the existing filter bar (alongside Time Period / Asset Type / Market / Drop Range), e.g. "company-specific only" / "hide sector-wide moves."
+Lineage: show as-of timestamp + benchmark source for excess_move, matching the existing "Sector medians from Finnhub…" label style.
+
+
+
+9. Acceptance criteria
+
+
+ classifyDrop(ticker) returns the §6 contract for any scanned ticker.
+ Classifier reads from the existing Recent News feed via getRecentNews(ticker) — no second news integration added.
+ Sector-relative move is computed and relative_outperformer correctly flags names that fell less than their sector.
+ A name with no news returns technical_no_news or a price-only classification with confidence: "low" — never crashes or returns empty.
+ Classification is produced by auditable rules; each result carries human-readable rationale.
+ Cause badge reuses the existing verdict-badge component; "Why It Dropped" panel fits the existing four-panel grid; rationale uses the existing ROIC-shift callout box style.
+ Evidence references items already in the Recent News feed — no full article text stored or displayed.
+ Cause filter added to the existing filter bar and works.
+ Nothing in the UI phrases output as buy/sell advice; disclaimer present.
+
+
+
+10. Out of scope (do not build now)
+
+Point-in-time/as-known historical data, backtesting, LLM-primary classification, alerting, Excel/API export. These are future phases — keep this PR focused on the classifier + sector-relative move + UI surfacing.
