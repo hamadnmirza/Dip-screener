@@ -318,7 +318,7 @@ components:
 
     NewsArticle:
       type: object
-      required: [headline, source, publishedAt, url]
+      required: [headline, source, publishedAt, url, sentiment]
       properties:
         headline:
           type: string
@@ -329,6 +329,13 @@ components:
           description: ISO 8601 datetime string
         url:
           type: string
+        sentiment:
+          type: string
+          enum: [positive, negative, neutral]
+          description: Polygon-derived sentiment for this ticker in this article
+        imageUrl:
+          type: string
+          description: Optional thumbnail image URL
 
     NewsResponse:
       type: object

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { fetchTickerNews } from "../lib/finnhub";
+import { fetchTickerNewsPolygon } from "../lib/polygon";
 
 const router: IRouter = Router();
 
@@ -10,7 +10,7 @@ router.get("/news/:ticker", async (req, res) => {
     return;
   }
 
-  const articles = await fetchTickerNews(ticker);
+  const articles = await fetchTickerNewsPolygon(ticker);
   res.json({ articles });
 });
 

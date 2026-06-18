@@ -345,13 +345,31 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+const SENTIMENT_STYLES: Record<string, { dot: string; label: string; labelCls: string }> = {
+  negative: { dot: "bg-red-500",    label: "Negative", labelCls: "text-red-400" },
+  positive: { dot: "bg-emerald-500", label: "Positive", labelCls: "text-emerald-400" },
+  neutral:  { dot: "bg-muted-foreground/40", label: "Neutral", labelCls: "text-muted-foreground/50" },
+};
+
 function NewsArticleRow({ article }: { article: NewsArticle }) {
+  const sentiment = article.sentiment ?? "neutral";
+  const s = SENTIMENT_STYLES[sentiment] ?? SENTIMENT_STYLES.neutral;
+
   return (
-    <div className="flex items-start justify-between gap-3 py-2 border-b border-border/30 last:border-0">
+    <div className="flex items-start gap-3 py-2.5 border-b border-border/30 last:border-0">
+      <div className="flex-shrink-0 mt-1">
+        <span
+          className={`block w-2 h-2 rounded-full ${s.dot}`}
+          title={s.label}
+        />
+      </div>
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="text-xs text-foreground/90 leading-snug line-clamp-2">{article.headline}</p>
-        <p className="text-[10px] text-muted-foreground/50">
-          {article.source} · {timeAgo(article.publishedAt)}
+        <p className="text-[10px] text-muted-foreground/50 flex items-center gap-1.5">
+          <span>{article.source}</span>
+          <span>·</span>
+          <span>{timeAgo(article.publishedAt)}</span>
+          <span className={`font-semibold ${s.labelCls}`}>· {s.label}</span>
         </p>
       </div>
       <a
@@ -371,14 +389,23 @@ function NewsSection({ ticker }: { ticker: string }) {
   const { data, isLoading } = useGetTickerNews(ticker);
   const articles = data?.articles ?? [];
 
+  const negCount = articles.filter((a) => a.sentiment === "negative").length;
+
   return (
     <div className="pt-3 border-t border-border/50">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-        Recent News
-      </span>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Recent News
+        </span>
+        {negCount > 0 && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20">
+            {negCount} negative
+          </span>
+        )}
+      </div>
 
       {isLoading && (
-        <div className="mt-2 space-y-2">
+        <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-8 w-full bg-muted/20" />
           ))}
@@ -386,11 +413,11 @@ function NewsSection({ ticker }: { ticker: string }) {
       )}
 
       {!isLoading && articles.length === 0 && (
-        <p className="mt-2 text-xs text-muted-foreground/40 italic">No recent news in the last 7 days.</p>
+        <p className="text-xs text-muted-foreground/40 italic">No recent news in the last 7 days.</p>
       )}
 
       {!isLoading && articles.length > 0 && (
-        <div className="mt-2">
+        <div>
           {articles.map((article) => (
             <NewsArticleRow key={article.url} article={article} />
           ))}

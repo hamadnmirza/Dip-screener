@@ -30,7 +30,9 @@ export const GetTickerNewsResponse = zod.object({
   "headline": zod.string(),
   "source": zod.string(),
   "publishedAt": zod.string().describe('ISO 8601 datetime string'),
-  "url": zod.string()
+  "url": zod.string(),
+  "sentiment": zod.enum(['positive', 'negative', 'neutral']).describe('Polygon-derived sentiment for this ticker in this article'),
+  "imageUrl": zod.string().optional().describe('Optional thumbnail image URL')
 }))
 })
 

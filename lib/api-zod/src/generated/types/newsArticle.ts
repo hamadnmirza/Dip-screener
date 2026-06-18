@@ -5,6 +5,7 @@
  * API specification for Dip Tracker - securities that have fallen in price
  * OpenAPI spec version: 0.1.0
  */
+import type { NewsArticleSentiment } from './newsArticleSentiment';
 
 export interface NewsArticle {
   headline: string;
@@ -12,4 +13,8 @@ export interface NewsArticle {
   /** ISO 8601 datetime string */
   publishedAt: string;
   url: string;
+  /** Polygon-derived sentiment for this ticker in this article */
+  sentiment: NewsArticleSentiment;
+  /** Optional thumbnail image URL */
+  imageUrl?: string;
 }

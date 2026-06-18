@@ -282,6 +282,144 @@ export function getTickerMarket(ticker: string): Market | null {
   return EQUITY_META[ticker]?.market ?? null;
 }
 
+// ── News via Polygon ───────────────────────────────────────────────────────────
+
+const NEWS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const NEWS_MAX_ARTICLES = 6;
+const NEWS_LOOKBACK_DAYS = 7;
+
+// Keywords that suggest a drop catalyst — each match adds to relevance score
+const DROP_CATALYST_KEYWORDS = [
+  "lawsuit", "sued", "fraud", "investigation", "probe", "sec", "doj",
+  "class action", "securities", "downgrade", "cut", "miss", "misses",
+  "warning", "recall", "layoff", "layoffs", "loss", "losses", "decline",
+  "disappoints", "disappointing", "shortfall", "guidance", "lower",
+  "subpoena", "fine", "penalty", "regulatory", "antitrust", "ban",
+  "resign", "resignation", "fired", "departing",
+];
+
+export type NewsSentiment = "positive" | "negative" | "neutral";
+
+export interface NewsArticle {
+  headline: string;
+  source: string;
+  publishedAt: string; // ISO 8601
+  url: string;
+  sentiment: NewsSentiment;
+  imageUrl?: string;
+}
+
+interface PolygonNewsInsight {
+  ticker: string;
+  sentiment: "positive" | "negative" | "neutral";
+  sentiment_reasoning: string;
+}
+
+interface PolygonNewsArticle {
+  title: string;
+  author: string;
+  published_utc: string;
+  article_url: string;
+  image_url?: string;
+  description?: string;
+  keywords?: string[];
+  publisher: { name: string };
+  insights?: PolygonNewsInsight[];
+}
+
+interface PolygonNewsResponse {
+  results: PolygonNewsArticle[];
+  status: string;
+}
+
+const newsCache = new Map<string, { data: NewsArticle[]; expiresAt: number }>();
+
+function scoreArticle(article: PolygonNewsArticle, ticker: string, sentiment: NewsSentiment): number {
+  let score = 0;
+
+  // Sentiment weight
+  if (sentiment === "negative") score += 4;
+  else if (sentiment === "positive") score -= 1;
+
+  // Recency boost — articles within last 48h
+  const ageMs = Date.now() - new Date(article.published_utc).getTime();
+  if (ageMs < 48 * 60 * 60 * 1000) score += 2;
+  else if (ageMs < 24 * 60 * 60 * 1000 * 4) score += 1;
+
+  // Keyword match in title + description
+  const text = `${article.title} ${article.description ?? ""}`.toLowerCase();
+  for (const kw of DROP_CATALYST_KEYWORDS) {
+    if (text.includes(kw)) score += 2;
+  }
+
+  // Ticker explicitly mentioned in title
+  if (article.title.toUpperCase().includes(ticker)) score += 1;
+
+  return score;
+}
+
+export async function fetchTickerNewsPolygon(ticker: string): Promise<NewsArticle[]> {
+  const cacheKey = `polygon-news:${ticker}`;
+  const cached = newsCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+
+  const apiKey = process.env.POLYGON_API_KEY;
+  if (!apiKey) {
+    logger.warn("POLYGON_API_KEY not set — skipping Polygon news fetch");
+    return [];
+  }
+
+  const from = new Date(Date.now() - NEWS_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const url =
+    `${POLYGON_BASE}/v2/reference/news` +
+    `?ticker=${encodeURIComponent(ticker)}` +
+    `&published_utc.gte=${from}` +
+    `&limit=20` +
+    `&sort=published_utc` +
+    `&order=desc` +
+    `&apiKey=${apiKey}`;
+
+  let raw: PolygonNewsResponse | null = null;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) {
+      logger.warn({ status: res.status, ticker }, "Polygon news API error");
+      return [];
+    }
+    raw = (await res.json()) as PolygonNewsResponse;
+  } catch (err) {
+    logger.warn({ ticker, err }, "Polygon news fetch failed");
+    return [];
+  }
+
+  if (!Array.isArray(raw?.results)) return [];
+
+  const scored = raw.results
+    .filter((a) => a.title && a.article_url)
+    .map((a) => {
+      const insight = a.insights?.find((i) => i.ticker === ticker);
+      const sentiment: NewsSentiment = insight?.sentiment ?? "neutral";
+      return { article: a, sentiment, score: scoreArticle(a, ticker, sentiment) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, NEWS_MAX_ARTICLES);
+
+  const articles: NewsArticle[] = scored.map(({ article, sentiment }) => ({
+    headline: article.title,
+    source: article.publisher?.name ?? "",
+    publishedAt: article.published_utc,
+    url: article.article_url,
+    sentiment,
+    imageUrl: article.image_url,
+  }));
+
+  newsCache.set(cacheKey, { data: articles, expiresAt: Date.now() + NEWS_CACHE_TTL_MS });
+  return articles;
+}
+
 export function getDropRange(percentChange: number): DropRange {
   const abs = Math.abs(percentChange);
   if (abs <= 10) return "up_to_10";

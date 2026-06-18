@@ -16,12 +16,28 @@ export interface PriceTarget {
   lastUpdated?: string | null;
 }
 
+/**
+ * Polygon-derived sentiment for this ticker in this article
+ */
+export type NewsArticleSentiment = typeof NewsArticleSentiment[keyof typeof NewsArticleSentiment];
+
+
+export const NewsArticleSentiment = {
+  positive: 'positive',
+  negative: 'negative',
+  neutral: 'neutral',
+} as const;
+
 export interface NewsArticle {
   headline: string;
   source: string;
   /** ISO 8601 datetime string */
   publishedAt: string;
   url: string;
+  /** Polygon-derived sentiment for this ticker in this article */
+  sentiment: NewsArticleSentiment;
+  /** Optional thumbnail image URL */
+  imageUrl?: string;
 }
 
 export interface NewsResponse {

@@ -47,6 +47,7 @@ export * from './listSecuritiesTimePeriod';
 export * from './multipleResult';
 export * from './multipleTag';
 export * from './newsArticle';
+export * from './newsArticleSentiment';
 export * from './newsResponse';
 export * from './priceTarget';
 export * from './roicResult';
